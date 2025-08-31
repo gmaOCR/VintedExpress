@@ -1,35 +1,20 @@
 // Auto-remplissage du formulaire /items/new à partir du brouillon stocké
 export {};
+import browser from 'webextension-polyfill';
+import { fillNewItemForm } from '../lib/filler';
+import { getTyped } from '../lib/storage';
+import type { RepublishDraft } from '../types/draft';
+import { KEY_REPUBLISH_DRAFT, RepublishDraftSchema } from '../types/draft';
 
-(function main() {
+void (async function main() {
   try {
-    const raw = sessionStorage.getItem('vx-republish-draft');
-    if (!raw) return;
-    const draft = JSON.parse(raw) as {
-      title?: string;
-      description?: string;
-      images?: string[];
-    } | null;
+    const draft = (await getTyped(KEY_REPUBLISH_DRAFT, RepublishDraftSchema)) as
+      | RepublishDraft
+      | undefined;
     if (!draft) return;
 
-    // Essayer de renseigner le titre et la description si les champs existent
-    const titleInput = document.querySelector<HTMLInputElement>(
-      'input[name="title"], input#title, [data-testid="item-title-input"]',
-    );
-    const descInput = document.querySelector<HTMLTextAreaElement>(
-      'textarea[name="description"], textarea#description, [data-testid="item-description-input"]',
-    );
-
-    if (titleInput && draft.title) {
-      titleInput.value = draft.title;
-      titleInput.dispatchEvent(new Event('input', { bubbles: true }));
-      titleInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    if (descInput && draft.description) {
-      descInput.value = draft.description;
-      descInput.dispatchEvent(new Event('input', { bubbles: true }));
-      descInput.dispatchEvent(new Event('change', { bubbles: true }));
-    }
+  // Remplissage avancé
+  await fillNewItemForm(draft);
 
     // Petit encart d’aide pour les images à re-uploader
     if (draft.images && draft.images.length) {
@@ -40,7 +25,12 @@ export {};
       helper.style.padding = '8px';
       helper.style.margin = '12px 0';
       helper.style.borderRadius = '6px';
-      helper.innerHTML = `<strong>VintedExpress:</strong> Réuploadez vos images (cliquer pour ouvrir dans un nouvel onglet).`;
+      const cats = draft.categoryPath?.join(' > ');
+      helper.innerHTML = `<strong>VintedExpress:</strong> Images à réuploader (cliquer pour ouvrir).${
+        cats ? `<br/><small>Catégorie détectée: ${cats}</small>` : ''
+      }${draft.condition ? `<br/><small>État: ${draft.condition}</small>` : ''}${
+        draft.material ? `<br/><small>Matière: ${draft.material}</small>` : ''
+      }${draft.color?.length ? `<br/><small>Couleur: ${draft.color.join(', ')}</small>` : ''}`;
 
       const list = document.createElement('div');
       list.style.display = 'flex';
@@ -67,8 +57,12 @@ export {};
       form?.insertBefore(helper, form.firstChild);
     }
 
-    // Nettoyer le stockage de session après usage
-    sessionStorage.removeItem('vx-republish-draft');
+    // Nettoyer le stockage après usage
+    try {
+      await browser.storage.local.remove(KEY_REPUBLISH_DRAFT);
+    } catch {
+      // ignore
+    }
   } catch {
     // ignorer les erreurs silencieusement
   }

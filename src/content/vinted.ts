@@ -1,4 +1,8 @@
+import { extractDraftFromItemPage } from '../lib/extractor';
 import { sendMessage } from '../lib/messaging';
+import { setTyped } from '../lib/storage';
+import type { RepublishDraft } from '../types/draft';
+import { KEY_REPUBLISH_DRAFT, RepublishDraftSchema } from '../types/draft';
 import { ContentReady, RepublishCreate, RepublishInjected } from '../types/messages';
 
 (function main() {
@@ -79,16 +83,24 @@ function enhanceListingPage() {
 
   btn.addEventListener('click', onRepublishClick);
   // Si on a la grille et le bouton supprimer, insérer juste après
-  const gridContainer = container.matches('.u-grid') ? container : container.querySelector('.u-grid');
+  const gridContainer = container.matches('.u-grid')
+    ? container
+    : container.querySelector('.u-grid');
   const del = gridContainer?.querySelector('[data-testid="item-delete-button"]');
   if (gridContainer && del && del.parentNode) {
     del.parentNode.insertBefore(btn, del.nextSibling);
-    void sendMessage(RepublishInjected, { type: 'republish:injected', payload: { where: 'actions', url: location.href } });
-  // Afficher aussi le bouton flottant de secours pour garantir la visibilité
-  ensureFloatingButton(isSold);
+    void sendMessage(RepublishInjected, {
+      type: 'republish:injected',
+      payload: { where: 'actions', url: location.href },
+    });
+    // Afficher aussi le bouton flottant de secours pour garantir la visibilité
+    ensureFloatingButton(isSold);
   } else {
     container.appendChild(btn);
-    void sendMessage(RepublishInjected, { type: 'republish:injected', payload: { where: 'fallback', url: location.href } });
+    void sendMessage(RepublishInjected, {
+      type: 'republish:injected',
+      payload: { where: 'fallback', url: location.href },
+    });
     // Ajouter un bouton flottant de secours si l’insertion est hors zone visible
     ensureFloatingButton(isSold);
   }
@@ -104,7 +116,8 @@ function enhanceListingPage() {
   setTimeout(() => {
     try {
       const cs = window.getComputedStyle(btn);
-      const hidden = cs.display === 'none' || cs.visibility === 'hidden' || btn.offsetParent === null;
+      const hidden =
+        cs.display === 'none' || cs.visibility === 'hidden' || btn.offsetParent === null;
       if (hidden) {
         ensureFloatingButton(isSold);
       }
@@ -137,31 +150,15 @@ function ensureFloatingButton(isSold: boolean) {
 }
 
 async function onRepublishClick() {
-  const draft = extractDraft();
+  const draft: RepublishDraft = extractDraftFromItemPage();
   // Ouvre le formulaire de création d’annonce; l’URL exacte peut varier selon la locale
   const targetUrl = new URL('/items/new', location.origin).toString();
   await sendMessage(RepublishCreate, { type: 'republish:create', payload: { targetUrl } });
   // Note: l’auto-remplissage sera géré par un content script sur la page /items/new
-  sessionStorage.setItem('vx-republish-draft', JSON.stringify(draft));
+  try {
+    await setTyped(KEY_REPUBLISH_DRAFT, draft, RepublishDraftSchema);
+  } catch (e) {
+    console.warn('[VX] save draft error', e);
+  }
 }
 
-function extractDraft() {
-  // Extraction prudente: on prend le titre et la description si disponibles
-  const title = (
-    document.querySelector('[data-testid="item-title"], h1')?.textContent ?? ''
-  ).trim();
-  const desc = (
-    document.querySelector(
-      '[data-testid="item-description"], .Item__description, [itemprop="description"]',
-    )?.textContent ?? ''
-  ).trim();
-  // Galerie images
-  const imgs = Array.from(
-    document.querySelectorAll<HTMLImageElement>(
-      '[data-testid^="item-photo-"] img, .item-photos img',
-    ),
-  )
-    .map((img) => img.src)
-    .filter(Boolean);
-  return { title, description: desc, images: imgs };
-}
