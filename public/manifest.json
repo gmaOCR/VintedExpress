@@ -9,11 +9,16 @@
   "background": { "service_worker": "src/background/index.ts", "type": "module" },
   "content_scripts": [
     {
-      "matches": ["https://*.vinted.fr/*"],
+      "matches": ["https://*.vinted.fr/*", "https://*.vinted.com/*"],
       "js": ["src/content/vinted.ts"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.vinted.fr/items/new*", "https://*.vinted.com/items/new*"],
+      "js": ["src/content/new-listing.ts"],
       "run_at": "document_idle"
     }
   ],
   "permissions": ["storage"],
-  "host_permissions": ["https://*.vinted.fr/*"]
+  "host_permissions": ["https://*.vinted.fr/*", "https://*.vinted.com/*"]
 }
