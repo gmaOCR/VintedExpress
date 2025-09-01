@@ -264,7 +264,9 @@ async function openDropdown(sel: {
   chevronSelector?: string;
   contentSelector?: string;
 }): Promise<{ input: HTMLInputElement | null; root: HTMLElement | Document }> {
-  const input = (await waitForElement<HTMLInputElement>(sel.inputSelector)) as HTMLInputElement | null;
+  const input = (await waitForElement<HTMLInputElement>(
+    sel.inputSelector,
+  )) as HTMLInputElement | null;
   if (!input) return { input: null, root: document };
   const chevron = sel.chevronSelector
     ? (input.parentElement?.querySelector(sel.chevronSelector) as HTMLElement | null)
@@ -297,7 +299,7 @@ async function selectFromDropdownByTitle(
       const clickable =
         title.closest<HTMLElement>('.web_ui__Cell__cell[role="button"]') ||
         title.closest<HTMLElement>('[role="button"]') ||
-        title.parentElement as HTMLElement | null;
+        (title.parentElement as HTMLElement | null);
       if (clickable) {
         click(clickable);
         return true;
@@ -332,7 +334,7 @@ async function multiSelectByTitles(
         const clickable =
           title.closest<HTMLElement>('.web_ui__Cell__cell[role="button"]') ||
           title.closest<HTMLElement>('[role="button"]') ||
-          title.parentElement as HTMLElement | null;
+          (title.parentElement as HTMLElement | null);
         if (clickable) {
           click(clickable);
           any = true;

@@ -31,7 +31,109 @@ import { ContentReady, RepublishCreate, RepublishInjected } from '../types/messa
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  // Forcer styles visibles et robuste aux thèmes
+  ensureStylesInjected();
+
+  // Heartbeat: si Vinted re-render et supprime notre bouton, on réinsère
+  setInterval(() => {
+    try {
+      if (/\/items\//.test(location.pathname)) {
+        const hasBtn = !!document.getElementById('vx-republish');
+        const del = document.querySelector('[data-testid="item-delete-button"]');
+        if (!hasBtn && del) {
+          enhanceListingPage();
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, 1500);
 })();
+
+function debug(...args: unknown[]) {
+  try {
+    // Activez via localStorage.setItem('vx:debug', '1')
+    if (localStorage.getItem('vx:debug') === '1') {
+      // eslint-disable-next-line no-console
+      console.debug('[VX]', ...args);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function hasAncestorWithClass(el: Element, className: string): boolean {
+  let cur: HTMLElement | null = el as HTMLElement;
+  while (cur) {
+    if (cur.classList && cur.classList.contains(className)) return true;
+    cur = cur.parentElement;
+  }
+  return false;
+}
+
+function isVisible(el: Element | null): boolean {
+  if (!el) return false;
+  if (!document.documentElement.contains(el)) return false;
+  // Écarter explicitement les conteneurs mobiles cachés
+  if (el.closest('.u-mobiles-only,[data-testid="item-mobiles-only-container"]')) return false;
+  // Écarter une éventuelle classe utilitaire cachant sur desktop
+  // Attention: '@' n'est pas un sélecteur valide en querySelector; utiliser classList
+  if (hasAncestorWithClass(el, 'u-hidden@desktops')) return false;
+
+  let cur: HTMLElement | null = el as HTMLElement;
+  while (cur) {
+    const cs = window.getComputedStyle(cur);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    cur = cur.parentElement;
+  }
+  const rect = (el as HTMLElement).getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function findPreferredDeleteButton(): HTMLButtonElement | null {
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('[data-testid="item-delete-button"]'),
+  );
+  if (!candidates.length) return null;
+  const ranked = candidates
+    .map((el) => {
+      const inSidebar = !!el.closest('#sidebar');
+      const inDesktops = !!el.closest('.u-desktops-only');
+      const inMobiles = !!el.closest('.u-mobiles-only,[data-testid="item-mobiles-only-container"]');
+      const visible = isVisible(el) && !inMobiles;
+      let score = 0;
+      if (visible) score += 10;
+      if (inSidebar) score += 5;
+      if (inDesktops) score += 3;
+      if (inMobiles) score -= 10;
+      return { el, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.el ?? null;
+}
+
+function findVisibleActionsBlock(): HTMLElement | null {
+  const blocks = Array.from(
+    document.querySelectorAll<HTMLElement>('.details-list__item.details-list--actions'),
+  );
+  if (!blocks.length) return null;
+  const ranked = blocks
+    .map((el) => {
+      const inSidebar = !!el.closest('#sidebar');
+      const inDesktops = !!el.closest('.u-desktops-only');
+      const inMobiles = !!el.closest('.u-mobiles-only,[data-testid="item-mobiles-only-container"]');
+      const visible = isVisible(el) && !inMobiles;
+      let score = 0;
+      if (visible) score += 10;
+      if (inSidebar) score += 5;
+      if (inDesktops) score += 3;
+      if (inMobiles) score -= 10;
+      return { el, score };
+    })
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.el ?? null;
+}
 
 function enhanceListingPage() {
   // Heuristique simple: URL d’une annonce Vinted contient souvent /items/xxx
@@ -47,16 +149,22 @@ function enhanceListingPage() {
   );
 
   // Chercher le conteneur d’actions via le bouton “Supprimer” et cibler la grille .u-grid
-  const deleteBtn = document.querySelector(
-    '[data-testid="item-delete-button"]',
-  ) as HTMLButtonElement | null;
-  const actionsBlock = deleteBtn?.closest(
-    '.details-list__item.details-list--actions',
-  ) as HTMLElement | null;
+  const deleteBtn = findPreferredDeleteButton();
+  const actionsBlock = (deleteBtn?.closest('.details-list__item.details-list--actions') ||
+    findVisibleActionsBlock()) as HTMLElement | null;
+  // La structure courante contient une grille .u-grid à l'intérieur
   const grid = (actionsBlock?.querySelector('.u-grid') ||
     deleteBtn?.closest('.u-grid')) as HTMLElement | null;
   const titleEl = document.querySelector('h1, [data-testid="item-title"]');
   const fallback = (titleEl?.parentElement || titleEl || document.body) as HTMLElement | null;
+
+  debug('enhance check', {
+    isItem,
+    isSold,
+    hasDelete: !!deleteBtn,
+    hasActions: !!actionsBlock,
+    where: deleteBtn?.closest('#sidebar') ? 'sidebar' : deleteBtn ? 'content' : 'none',
+  });
 
   // Si le bouton existe déjà ailleurs et qu’on a trouvé la grille, déplace-le dedans
   const existing = document.getElementById('vx-republish');
@@ -67,7 +175,11 @@ function enhanceListingPage() {
   // Éviter les doublons globaux
   if (existing) return;
   const container = grid || actionsBlock || fallback;
-  if (!container) return;
+  if (!container) {
+    debug('no container yet, will fallback to FAB');
+    ensureFloatingSoon(isSold);
+    return;
+  }
 
   const btn = document.createElement('button');
   btn.id = 'vx-republish';
@@ -78,39 +190,46 @@ function enhanceListingPage() {
   btn.innerHTML = `<span class="web_ui__Button__content"><span class="web_ui__Button__label">${
     isSold ? 'Republier' : 'Dupliquer'
   }</span></span>`;
-  // Assurer un petit espacement visuel
-  (btn.style as CSSStyleDeclaration).marginLeft = '8px';
+  // Assurer un petit espacement visuel et un code couleur distinct du bouton "Supprimer"
+  const baseStyle = btn.style as CSSStyleDeclaration;
+  baseStyle.marginLeft = '0';
+  baseStyle.marginTop = '8px';
+  baseStyle.display = 'inline-flex';
+  baseStyle.alignItems = 'center';
+  baseStyle.gap = '6px';
+  // Couleur distincte (vert doux), sans casser le thème Vinted
+  baseStyle.border = baseStyle.border || '1px solid #2f855a';
+  baseStyle.color = baseStyle.color || '#2f855a';
+  baseStyle.background = baseStyle.background || '#f0fff4';
 
   btn.addEventListener('click', onRepublishClick);
-  // Si on a la grille et le bouton supprimer, insérer juste après
-  const gridContainer = container.matches('.u-grid')
-    ? container
-    : container.querySelector('.u-grid');
-  const del = gridContainer?.querySelector('[data-testid="item-delete-button"]');
-  if (gridContainer && del && del.parentNode) {
-    del.parentNode.insertBefore(btn, del.nextSibling);
+  // Si on a la grille et le bouton supprimer, insérer juste après dans le même parent
+  const gridContainer = (
+    container.matches('.u-grid') ? container : container.querySelector('.u-grid')
+  ) as HTMLElement | null;
+  const del = (gridContainer || container).querySelector(
+    '[data-testid="item-delete-button"]',
+  ) as HTMLElement | null;
+  if (gridContainer && del && del.parentElement) {
+    del.parentElement.insertBefore(btn, del.nextSibling);
     void sendMessage(RepublishInjected, {
       type: 'republish:injected',
       payload: { where: 'actions', url: location.href },
     });
-    // Afficher aussi le bouton flottant de secours pour garantir la visibilité
-    ensureFloatingButton(isSold);
   } else {
+    debug('grid/del not found, appending to container');
     container.appendChild(btn);
     void sendMessage(RepublishInjected, {
       type: 'republish:injected',
       payload: { where: 'fallback', url: location.href },
     });
-    // Ajouter un bouton flottant de secours si l’insertion est hors zone visible
-    ensureFloatingButton(isSold);
   }
 
   // Forcer un style de base visible dans tous les cas
   const s = btn.style as CSSStyleDeclaration;
-  s.display = 'inline-flex';
-  s.alignItems = 'center';
-  s.gap = '6px';
-  s.marginLeft = s.marginLeft || '8px';
+  s.display = s.display || 'inline-flex';
+  s.alignItems = s.alignItems || 'center';
+  s.gap = s.gap || '6px';
 
   // Vérifier la visibilité après le layout; sinon, fallback flottant
   setTimeout(() => {
@@ -125,6 +244,30 @@ function enhanceListingPage() {
       // ignore
     }
   }, 50);
+}
+
+function ensureFloatingSoon(isSold: boolean) {
+  // Évite de créer plusieurs FAB si les mutations se déclenchent souvent
+  if (document.getElementById('vx-republish') || document.getElementById('vx-republish-fab')) {
+    return;
+  }
+  setTimeout(() => {
+    if (!document.getElementById('vx-republish') && !document.getElementById('vx-republish-fab')) {
+      ensureFloatingButton(isSold);
+    }
+  }, 200);
+}
+
+function ensureStylesInjected() {
+  if (document.getElementById('vx-style')) return;
+  const style = document.createElement('style');
+  style.id = 'vx-style';
+  style.textContent = `
+    #vx-republish { display: inline-flex !important; visibility: visible !important; opacity: 1 !important; align-items: center; gap: 6px; }
+    #vx-republish .web_ui__Button__label { white-space: nowrap; }
+    #vx-republish-fab { font: inherit; }
+  `;
+  document.documentElement.appendChild(style);
 }
 
 function ensureFloatingButton(isSold: boolean) {
