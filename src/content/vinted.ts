@@ -63,6 +63,52 @@ function debug(...args: unknown[]) {
   }
 }
 
+// --- i18n minimal pour le label du bouton ---
+type Locale = 'en' | 'fr' | 'de' | 'es' | 'it' | 'nl' | 'pl' | 'pt' | 'lt' | 'cs';
+const LABELS: Record<Locale, { republish: string; duplicate: string }> = {
+  en: { republish: 'Republish', duplicate: 'Duplicate' },
+  fr: { republish: 'Republier', duplicate: 'Dupliquer' },
+  de: { republish: 'Wiederveröffentlichen', duplicate: 'Duplizieren' },
+  es: { republish: 'Republicar', duplicate: 'Duplicar' },
+  it: { republish: 'Ripubblica', duplicate: 'Duplica' },
+  nl: { republish: 'Opnieuw plaatsen', duplicate: 'Dupliceren' },
+  pl: { republish: 'Wystaw ponownie', duplicate: 'Duplikuj' },
+  pt: { republish: 'Republicar', duplicate: 'Duplicar' },
+  lt: { republish: 'Paskelbti iš naujo', duplicate: 'Dubliuoti' },
+  cs: { republish: 'Znovu zveřejnit', duplicate: 'Duplikovat' },
+};
+
+function detectLocale(): Locale {
+  try {
+    // 1) <html lang="xx-YY">
+    const lang = (document.documentElement.getAttribute('lang') || '').toLowerCase();
+    if (lang) {
+      const base = lang.split('-')[0] as Locale;
+      if (base in LABELS) return base;
+    }
+    // 2) TLD/host heuristique
+    const host = location.hostname.toLowerCase();
+    if (host.endsWith('.fr')) return 'fr';
+    if (host.endsWith('.de')) return 'de';
+    if (host.endsWith('.es')) return 'es';
+    if (host.endsWith('.it')) return 'it';
+    if (host.endsWith('.nl')) return 'nl';
+    if (host.endsWith('.pl')) return 'pl';
+    if (host.endsWith('.pt')) return 'pt';
+    if (host.endsWith('.lt')) return 'lt';
+    if (host.endsWith('.cz')) return 'cs';
+  } catch {
+    // ignore
+  }
+  return 'en';
+}
+
+function tLabel(key: 'republish' | 'duplicate'): string {
+  const loc = detectLocale();
+  const pack = LABELS[loc] || LABELS.en;
+  return pack[key];
+}
+
 function hasAncestorWithClass(el: Element, className: string): boolean {
   let cur: HTMLElement | null = el as HTMLElement;
   while (cur) {
@@ -188,7 +234,7 @@ function enhanceListingPage() {
   // Style natif Vinted pour s’intégrer
   btn.className = 'web_ui__Button__button web_ui__Button__outlined web_ui__Button__medium';
   btn.innerHTML = `<span class="web_ui__Button__content"><span class="web_ui__Button__label">${
-    isSold ? 'Republier' : 'Dupliquer'
+    isSold ? tLabel('republish') : tLabel('duplicate')
   }</span></span>`;
   // Assurer un petit espacement visuel et un code couleur distinct du bouton "Supprimer"
   const baseStyle = btn.style as CSSStyleDeclaration;
@@ -196,6 +242,7 @@ function enhanceListingPage() {
   baseStyle.marginTop = '8px';
   baseStyle.display = 'inline-flex';
   baseStyle.alignItems = 'center';
+  baseStyle.justifyContent = 'center';
   baseStyle.gap = '6px';
   // Couleur distincte (vert doux), sans casser le thème Vinted
   baseStyle.border = baseStyle.border || '1px solid #2f855a';
@@ -229,6 +276,7 @@ function enhanceListingPage() {
   const s = btn.style as CSSStyleDeclaration;
   s.display = s.display || 'inline-flex';
   s.alignItems = s.alignItems || 'center';
+  s.justifyContent = s.justifyContent || 'center';
   s.gap = s.gap || '6px';
 
   // Vérifier la visibilité après le layout; sinon, fallback flottant
@@ -263,7 +311,7 @@ function ensureStylesInjected() {
   const style = document.createElement('style');
   style.id = 'vx-style';
   style.textContent = `
-    #vx-republish { display: inline-flex !important; visibility: visible !important; opacity: 1 !important; align-items: center; gap: 6px; }
+  #vx-republish { display: inline-flex !important; visibility: visible !important; opacity: 1 !important; align-items: center; justify-content: center; gap: 6px; }
     #vx-republish .web_ui__Button__label { white-space: nowrap; }
     #vx-republish-fab { font: inherit; }
   `;
@@ -275,7 +323,7 @@ function ensureFloatingButton(isSold: boolean) {
   const fab = document.createElement('button');
   fab.id = 'vx-republish-fab';
   fab.type = 'button';
-  fab.textContent = isSold ? 'Republier' : 'Dupliquer';
+  fab.textContent = isSold ? tLabel('republish') : tLabel('duplicate');
   Object.assign(fab.style, {
     position: 'fixed',
     right: '12px',
