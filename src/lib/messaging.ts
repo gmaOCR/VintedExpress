@@ -29,5 +29,14 @@ export async function sendMessage<T extends z.ZodTypeAny>(schema: T, message: z.
   if (!result.success) {
     throw new Error('Invalid message payload');
   }
-  return browser.runtime.sendMessage(result.data);
+  try {
+    return await browser.runtime.sendMessage(result.data);
+  } catch (err) {
+    const msg = (err as Error)?.message || '';
+    // Avoid noisy errors when the extension context gets reloaded/navigated
+    if (/Extension context invalidated/i.test(msg)) {
+      return;
+    }
+    throw err;
+  }
 }

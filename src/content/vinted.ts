@@ -161,4 +161,3 @@ async function onRepublishClick() {
     console.warn('[VX] save draft error', e);
   }
 }
-

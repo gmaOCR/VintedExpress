@@ -10,6 +10,7 @@ export interface RepublishDraft {
   material?: string; // ex: "Acier"
   color?: string[]; // ex: ["Gris", "Argenté"]
   categoryPath?: string[]; // ex: ["Hommes", "Accessoires", "Bijoux", "Colliers"]
+  unisex?: boolean; // vrai si l'annonce d'origine indique Unisexe/Unisex
 }
 
 export const RepublishDraftSchema = z.object({
@@ -22,6 +23,7 @@ export const RepublishDraftSchema = z.object({
   material: z.string().optional(),
   color: z.array(z.string()).optional(),
   categoryPath: z.array(z.string()).optional(),
+  unisex: z.boolean().optional(),
 });
 
 export type RepublishDraftParsed = z.infer<typeof RepublishDraftSchema>;

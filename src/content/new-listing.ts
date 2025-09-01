@@ -1,6 +1,7 @@
 // Auto-remplissage du formulaire /items/new à partir du brouillon stocké
 export {};
 import browser from 'webextension-polyfill';
+
 import { fillNewItemForm } from '../lib/filler';
 import { getTyped } from '../lib/storage';
 import type { RepublishDraft } from '../types/draft';
@@ -13,8 +14,8 @@ void (async function main() {
       | undefined;
     if (!draft) return;
 
-  // Remplissage avancé
-  await fillNewItemForm(draft);
+    // Remplissage avancé
+    await fillNewItemForm(draft);
 
     // Petit encart d’aide pour les images à re-uploader
     if (draft.images && draft.images.length) {

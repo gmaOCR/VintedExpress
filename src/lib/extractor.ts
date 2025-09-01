@@ -15,7 +15,7 @@ function parsePrice(text: string | null | undefined): { value?: number; currency
 function splitColors(text: string | null | undefined): string[] | undefined {
   if (!text) return undefined;
   const v = text
-    .split(/,|\/|·|•|\u2022|\u00B7/)
+    .split(/,|\/|·|•|\u2022|\u00B7|\s+\/\s+|\s*\+\s*/)
     .map((s) => s.trim())
     .filter(Boolean);
   return v.length ? v : undefined;
@@ -24,38 +24,64 @@ function splitColors(text: string | null | undefined): string[] | undefined {
 export function extractDraftFromItemPage(): RepublishDraft {
   // Titre
   const title = (
-    document.querySelector('[data-testid="item-title"], .box--item-details h1, h1')?.textContent ?? ''
+    document.querySelector('[data-testid="item-title"], .box--item-details h1, h1')?.textContent ??
+    ''
   ).trim();
 
-  // Description (dépliée si possible)
-  const descNode =
-    document.querySelector('[data-testid="item-description"], [itemprop="description"], .details-list__info [itemprop="description"], .details-list__info') ||
+  // Description (dépliée si possible, sans inclure les blocs "Envoi", boutons, etc.)
+  let description = '';
+  const descContainer =
+    document.querySelector('[itemprop="description"]') ||
+    document.querySelector('[data-testid="item-description"]') ||
     document.querySelector('.Item__description');
-  const description = (descNode?.textContent ?? '').trim();
+  if (descContainer) {
+    // Essayer d’étendre si un bouton "... plus" est présent
+    const expandBtn = Array.from(descContainer.querySelectorAll('button')).find((b) =>
+      /plus|more|mehr|más|più|meer/i.test(b.textContent ?? ''),
+    ) as HTMLButtonElement | undefined;
+    try {
+      expandBtn?.click();
+    } catch {
+      // ignore
+    }
+    // Cloner et supprimer les boutons pour éviter de capturer leur libellé
+    const clone = descContainer.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll('button').forEach((b) => b.remove());
+    description = (clone.textContent ?? '').replace(/\s+/g, ' ').trim();
+  }
 
   // Prix
   const priceText = (
-    document.querySelector('[data-testid="item-price"], [data-testid="item-price"] p, .details-list--pricing')?.textContent ?? ''
+    document.querySelector(
+      '[data-testid="item-price"], [data-testid="item-price"] p, .details-list--pricing',
+    )?.textContent ?? ''
   ).trim();
   const { value: priceValue, currency } = parsePrice(priceText);
 
   // Condition
   const condition = (
-    document.querySelector('[data-testid="item-attributes-status"] [itemprop="status"], [data-testid="item-attributes-status"] .details-list__item-value:last-child')?.textContent ?? ''
+    document.querySelector(
+      '[data-testid="item-attributes-status"] [itemprop="status"], [data-testid="item-attributes-status"] .details-list__item-value:last-child',
+    )?.textContent ?? ''
   )
     .replace(/\s+/g, ' ')
     .trim();
 
   // Matière
-  const material = (
-    document.querySelector('[data-testid="item-attributes-material"] [itemprop="material"], [data-testid="item-attributes-material"] .details-list__item-value:last-child')?.textContent ?? ''
-  )
-    .replace(/\s+/g, ' ')
-    .trim() || undefined;
+  const material =
+    (
+      document.querySelector(
+        '[data-testid="item-attributes-material"] [itemprop="material"], [data-testid="item-attributes-material"] .details-list__item-value:last-child',
+      )?.textContent ?? ''
+    )
+      .replace(/\s+/g, ' ')
+      .trim() || undefined;
 
   // Couleur(s)
   const colorText = (
-    document.querySelector('[data-testid="item-attributes-color"] [itemprop="color"], [data-testid="item-attributes-color"] .details-list__item-value:last-child')?.textContent ?? ''
+    document.querySelector(
+      '[data-testid="item-attributes-color"] [itemprop="color"], [data-testid="item-attributes-color"] .details-list__item-value:last-child',
+    )?.textContent ?? ''
   )
     .replace(/\s+/g, ' ')
     .trim();
@@ -63,17 +89,34 @@ export function extractDraftFromItemPage(): RepublishDraft {
 
   // Images
   const images = Array.from(
-    document.querySelectorAll<HTMLImageElement>('[data-testid^="item-photo-"] img, .item-photos img')
+    document.querySelectorAll<HTMLImageElement>(
+      '[data-testid^="item-photo-"] img, .item-photos img',
+    ),
   )
     .map((img) => img.src)
     .filter(Boolean);
 
   // Breadcrumbs -> catégories
   const categoryPath = Array.from(
-    document.querySelectorAll<HTMLLIElement>('.breadcrumbs li [itemprop="title"], .breadcrumbs li span, .breadcrumbs__item span')
+    document.querySelectorAll<HTMLLIElement>(
+      '.breadcrumbs li [itemprop="title"], .breadcrumbs li span, .breadcrumbs__item span',
+    ),
   )
     .map((el) => el.textContent?.trim() ?? '')
     .filter((t) => t && t.toLowerCase() !== 'accueil');
+
+  // Unisexe: présent parfois près du titre ou dans un indicateur de genre
+  // Heuristiques: chercher un badge/libellé "Unisexe"/"Unisex" dans l'en-tête
+  let unisex: boolean | undefined = undefined;
+  try {
+    const header = document.querySelector('h1')?.parentElement ?? document.body;
+    const text = (header?.textContent ?? '').toLowerCase();
+    if (/\bunisexe\b|\bunisex\b/.test(text)) {
+      unisex = true;
+    }
+  } catch {
+    // ignore
+  }
 
   return {
     title,
@@ -85,5 +128,6 @@ export function extractDraftFromItemPage(): RepublishDraft {
     material,
     color,
     categoryPath: categoryPath.length ? categoryPath : undefined,
+    unisex,
   };
 }
