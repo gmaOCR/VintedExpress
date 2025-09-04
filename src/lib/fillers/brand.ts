@@ -1,4 +1,5 @@
 import type { RepublishDraft } from '../../types/draft';
+import { getTimeout } from '../config';
 import { click, setInputValue, waitForElement } from '../dom-utils';
 import { openDropdown, selectFromDropdownByText, selectFromDropdownByTitle } from '../dropdown';
 import { NO_BRAND_SYNONYMS } from '../i18n';
@@ -29,7 +30,9 @@ async function selectBrandEmptyById(): Promise<boolean> {
   if (!input) return false;
   const chevron = (input.parentElement?.querySelector(sel.chevronSelector!) as HTMLElement) || null;
   click(chevron || input);
-  await waitForElement<HTMLElement>(sel.contentSelector!, { timeoutMs: 1500 });
+  await waitForElement<HTMLElement>(sel.contentSelector!, {
+    timeoutMs: Math.min(1500, getTimeout('wait.dropdown.content')),
+  });
   const el =
     (document.getElementById('empty-brand') as HTMLElement | null) ||
     (document.querySelector('#empty-brand') as HTMLElement | null);
@@ -52,7 +55,7 @@ async function selectBrandNoBrandQuick(): Promise<boolean> {
   if (fast) return true;
   const { input, root } = await openDropdown(sel);
   if (!input) return false;
-  const deadline = Date.now() + 500;
+  const deadline = Date.now() + Math.min(600, getTimeout('wait.dropdown.commit'));
   while (Date.now() < deadline) {
     const options = Array.from(
       (root as HTMLElement | Document).querySelectorAll<HTMLElement>(
@@ -86,7 +89,9 @@ async function selectBrandNoBrand(): Promise<boolean> {
   if (!input) return false;
   const chevron = (input.parentElement?.querySelector(sel.chevronSelector!) as HTMLElement) || null;
   click(chevron || input);
-  await waitForElement<HTMLElement>(sel.contentSelector!, { timeoutMs: 2500 });
+  await waitForElement<HTMLElement>(sel.contentSelector!, {
+    timeoutMs: Math.min(2500, getTimeout('wait.dropdown.content')),
+  });
   // Si aucun champ de recherche n'est présent, éviter une boucle coûteuse: cliquer le dernier élément
   const hasSearch = !!document.querySelector(sel.searchSelector!);
   if (!hasSearch) {

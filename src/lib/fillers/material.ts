@@ -6,6 +6,7 @@ import {
   multiSelectByTitles,
   multiSelectByTitlesLoose,
 } from '../dropdown';
+import { normalizeMaterial } from '../i18n';
 
 export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   if (!draft.material) return;
@@ -20,11 +21,11 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   } as const;
   const root = await waitForElement<HTMLInputElement>(sel.inputSelector, { timeoutMs: 6000 });
   if (!root) return;
-  const materials = splitList(draft.material);
-  let ok = await multiSelectByEnter(sel, materials.length ? materials : [draft.material]);
-  if (!ok) ok = await multiSelectByTitles(sel, materials.length ? materials : [draft.material]);
-  if (!ok)
-    ok = await multiSelectByTitlesLoose(sel, materials.length ? materials : [draft.material]);
+  const materials = splitList(draft.material).map((m) => normalizeMaterial(m));
+  const labels = materials.length ? materials : [normalizeMaterial(draft.material)];
+  let ok = await multiSelectByEnter(sel, labels);
+  if (!ok) ok = await multiSelectByTitles(sel, labels);
+  if (!ok) ok = await multiSelectByTitlesLoose(sel, labels);
   if (!ok) {
     try {
       setInputValue(root, draft.material);

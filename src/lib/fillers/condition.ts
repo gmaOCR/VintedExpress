@@ -1,6 +1,7 @@
 import type { RepublishDraft } from '../../types/draft';
 import { waitForElement } from '../dom-utils';
 import { selectFromDropdownByTitle, selectSingleByEnter } from '../dropdown';
+import { normalizeCondition } from '../i18n';
 
 export async function fillCondition(draft: RepublishDraft): Promise<void> {
   if (!draft.condition) return;
@@ -15,13 +16,14 @@ export async function fillCondition(draft: RepublishDraft): Promise<void> {
   } as const;
   const root = await waitForElement<HTMLInputElement>(sel.inputSelector, { timeoutMs: 6000 });
   if (!root) return;
-  await selectSingleByEnter(sel, draft.condition);
+  const wanted = normalizeCondition(draft.condition);
+  await selectSingleByEnter(sel, wanted);
   await selectFromDropdownByTitle(
     {
       inputSelector: sel.inputSelector,
       chevronSelector: sel.chevronSelector,
       contentSelector: sel.contentSelector,
     },
-    draft.condition,
+    wanted,
   );
 }

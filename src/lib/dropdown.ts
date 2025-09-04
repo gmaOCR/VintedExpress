@@ -1,3 +1,4 @@
+import { getTimeout } from './config';
 import { click, delay, normalize, waitForElement, waitForGone } from './dom-utils';
 
 export async function openDropdown(sel: {
@@ -22,7 +23,9 @@ export async function openDropdown(sel: {
   click(chevron || input);
   let root: HTMLElement | Document = document;
   if (sel.contentSelector) {
-    const container = await waitForElement<HTMLElement>(sel.contentSelector, { timeoutMs: 3000 });
+    const container = await waitForElement<HTMLElement>(sel.contentSelector, {
+      timeoutMs: getTimeout('wait.dropdown.content'),
+    });
     if (container) root = container;
   }
   return { input, root };
@@ -137,12 +140,17 @@ export async function selectFromDropdownByText(
     ? (input.parentElement?.querySelector(sel.chevronSelector) as HTMLElement | null)
     : null;
   click(chevron || input);
-  if (sel.contentSelector)
-    await waitForElement<HTMLElement>(sel.contentSelector, { timeoutMs: 2000 });
+  let root: Document | HTMLElement = document;
+  if (sel.contentSelector) {
+    const container = await waitForElement<HTMLElement>(sel.contentSelector, {
+      timeoutMs: getTimeout('wait.dropdown.content'),
+    });
+    if (container) root = container;
+  }
 
   if (sel.searchSelector) {
     const search = (await waitForElement<HTMLInputElement>(sel.searchSelector, {
-      timeoutMs: 600,
+      timeoutMs: getTimeout('wait.dropdown.search'),
     })) as HTMLInputElement | null;
     if (search) {
       search.value = '';
@@ -158,7 +166,7 @@ export async function selectFromDropdownByText(
   const wanted = normalize(label);
   while (Date.now() < deadline) {
     const options = Array.from(
-      document.querySelectorAll<HTMLElement>(
+      (root as HTMLElement | Document).querySelectorAll<HTMLElement>(
         '[role="option"], .web_ui__Cell__cell[role="button"], li, button',
       ),
     );
@@ -188,7 +196,7 @@ export async function selectSingleByEnter(
   if (!input) return false;
   const search = sel.searchSelector
     ? ((await waitForElement<HTMLInputElement>(sel.searchSelector, {
-        timeoutMs: 800,
+        timeoutMs: getTimeout('wait.dropdown.search'),
       })) as HTMLInputElement | null)
     : null;
   if (!search) return false;
