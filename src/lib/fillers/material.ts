@@ -1,6 +1,11 @@
 import type { RepublishDraft } from '../../types/draft';
 import { setInputValue, waitForElement } from '../dom-utils';
-import { forceCloseDropdown, multiSelectByEnter, multiSelectByTitles, multiSelectByTitlesLoose } from '../dropdown';
+import {
+  forceCloseDropdown,
+  multiSelectByEnter,
+  multiSelectByTitles,
+  multiSelectByTitlesLoose,
+} from '../dropdown';
 
 export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   if (!draft.material) return;
@@ -18,7 +23,8 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   const materials = splitList(draft.material);
   let ok = await multiSelectByEnter(sel, materials.length ? materials : [draft.material]);
   if (!ok) ok = await multiSelectByTitles(sel, materials.length ? materials : [draft.material]);
-  if (!ok) ok = await multiSelectByTitlesLoose(sel, materials.length ? materials : [draft.material]);
+  if (!ok)
+    ok = await multiSelectByTitlesLoose(sel, materials.length ? materials : [draft.material]);
   if (!ok) {
     try {
       setInputValue(root, draft.material);

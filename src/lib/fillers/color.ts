@@ -1,7 +1,7 @@
 import type { RepublishDraft } from '../../types/draft';
+import { colorSynonym, colorToSlug } from '../color-map';
 import { click, delay, normalize, setInputValue, waitForElement } from '../dom-utils';
 import { forceCloseDropdown, openDropdown, waitForTitlesChange } from '../dropdown';
-import { colorSynonym, colorToSlug } from '../color-map';
 
 export async function fillColor(draft: RepublishDraft): Promise<void> {
   if (!draft.color || !draft.color.length) return;

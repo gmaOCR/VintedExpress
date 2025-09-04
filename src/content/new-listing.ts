@@ -1,6 +1,16 @@
 // Auto-remplissage du formulaire /items/new à partir du brouillon stocké
 import { fillNewItemForm } from '../lib/filler';
+import { ensureExtension, ensureUploadableImage, inferNameFromUrl } from '../lib/images';
 import { sendMessage } from '../lib/messaging';
+import {
+  dispatchInputFiles,
+  dndOneFile,
+  getFeedbackTargets,
+  jitter,
+  resolveDropHost,
+  waitForDropHost,
+  waitForMediaFeedback,
+} from '../lib/upload';
 import type { RepublishDraft } from '../types/draft';
 import { ImageConvertJpeg, ImageDownload } from '../types/messages';
 export {};
@@ -90,20 +100,9 @@ try {
 
 async function tryDropImages(urls: string[]) {
   // Cible prioritaire: la dropzone officielle; attendre brièvement si absente
-  let dropHost =
-    (document.querySelector('[data-testid="dropzone"]') as HTMLElement | null) ||
-    (document.querySelector('.media-select__input') as HTMLElement | null) ||
-    (document.querySelector('[data-testid="photo-uploader"]') as HTMLElement | null);
+  let dropHost = resolveDropHost();
   if (!dropHost) {
-    const deadline = Date.now() + 8000;
-    while (!dropHost && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 120));
-      imgLog('debug', 'waiting:dropHost');
-      dropHost =
-        (document.querySelector('[data-testid="dropzone"]') as HTMLElement | null) ||
-        (document.querySelector('.media-select__input') as HTMLElement | null) ||
-        (document.querySelector('[data-testid="photo-uploader"]') as HTMLElement | null);
-    }
+    dropHost = await waitForDropHost(8000);
     if (!dropHost) {
       imgLog('warn', 'dropHost not found');
       // Fallback: tenter directement via un input[type=file] global même sans dropzone
@@ -111,20 +110,14 @@ async function tryDropImages(urls: string[]) {
       if (anyInput) {
         try {
           imgLog('info', 'fallback:global-file-input:found');
-          const files: File[] = [];
-          for (const u of urls) {
-            files.push(
+          const files: File[] = urls.map(
+            (u) =>
               new File(
                 [new Blob([''], { type: 'application/octet-stream' })],
                 inferNameFromUrl(u) || 'image',
               ),
-            );
-          }
-          const dtAll = new DataTransfer();
-          for (const f of files) dtAll.items.add(f);
-          Object.defineProperty(anyInput, 'files', { value: dtAll.files });
-          anyInput.dispatchEvent(new Event('input', { bubbles: true }));
-          anyInput.dispatchEvent(new Event('change', { bubbles: true }));
+          );
+          dispatchInputFiles(anyInput, files);
           imgLog('info', 'fallback:global-file-input:dispatched', { count: files.length });
         } catch (e) {
           imgLog('warn', 'fallback:global-file-input:failed', { err: (e as Error)?.message });
@@ -480,21 +473,15 @@ async function tryDropImages(urls: string[]) {
 
   // 2) DnD unitaire: déposer un fichier, attendre que la grille s'incrémente, puis continuer
   // Attendre la grille si nécessaire
-  let grid =
-    (document.querySelector('[data-testid="media-select-grid"]') as HTMLElement | null) || dropHost;
+  let { grid, live } = getFeedbackTargets(dropHost);
   if (!grid || grid === dropHost) {
     const gDeadline = Date.now() + 3000;
     while ((!grid || grid === dropHost) && Date.now() < gDeadline) {
       await new Promise((r) => setTimeout(r, 120));
       imgLog('debug', 'waiting:grid');
-      grid =
-        (document.querySelector('[data-testid="media-select-grid"]') as HTMLElement | null) ||
-        dropHost;
+      ({ grid, live } = getFeedbackTargets(dropHost));
     }
   }
-  const live =
-    (dropHost.querySelector('[role="status"][aria-live="assertive"]') as HTMLElement | null) ||
-    (document.getElementById('DndLiveRegion-0') as HTMLElement | null);
   const target =
     (dropHost.querySelector('[data-testid="dropzone-overlay"]') as HTMLElement) || dropHost;
   const rect = target.getBoundingClientRect();
@@ -511,13 +498,6 @@ async function tryDropImages(urls: string[]) {
     await jitter(60, 180);
     const beforeCount = grid ? grid.childElementCount : 0;
     const beforeLive = live ? (live.textContent ?? '') : '';
-    const dt = new DataTransfer();
-    dt.items.add(f);
-    try {
-      (dt as DataTransfer).dropEffect = 'copy';
-    } catch {
-      // ignore
-    }
     imgLog('info', 'step:dnd:dispatch', {
       name: f.name,
       type: f.type,
@@ -525,46 +505,7 @@ async function tryDropImages(urls: string[]) {
       beforeCount,
       beforeLive,
     });
-
-    const dragEnter = new DragEvent('dragenter', {
-      bubbles: true,
-      cancelable: true,
-      clientX,
-      clientY,
-      dataTransfer: dt,
-    } as DragEventInit);
-    const dragOver = new DragEvent('dragover', {
-      bubbles: true,
-      cancelable: true,
-      clientX: clientX + Math.floor(Math.random() * 6 - 3),
-      clientY: clientY + Math.floor(Math.random() * 6 - 3),
-      dataTransfer: dt,
-    } as DragEventInit);
-    const drop = new DragEvent('drop', {
-      bubbles: true,
-      cancelable: true,
-      clientX,
-      clientY,
-      dataTransfer: dt,
-    } as DragEventInit);
-
-    target.dispatchEvent(dragEnter);
-    await jitter(15, 60);
-    // quelques dragover successifs pour mimer un mouvement
-    for (let k = 0; k < 2; k++) {
-      target.dispatchEvent(dragOver);
-      await jitter(10, 40);
-    }
-    target.dispatchEvent(drop);
-    // dragleave pour clore proprement la séquence DnD
-    const dragLeave = new DragEvent('dragleave', {
-      bubbles: true,
-      cancelable: true,
-      clientX,
-      clientY,
-      dataTransfer: dt,
-    } as DragEventInit);
-    target.dispatchEvent(dragLeave);
+    await dndOneFile(target, f);
     imgLog('debug', 'drop dispatched', { name: f.name, type: f.type, size: f.size });
     const ok = await waitForMediaFeedback(grid, live, beforeCount, beforeLive, 6000);
     if (!ok) {
@@ -591,11 +532,7 @@ async function tryDropImages(urls: string[]) {
       const input = (dropHost.querySelector('input[type="file"]') ||
         document.querySelector('input[type="file"]')) as HTMLInputElement | null;
       if (input) {
-        const dtAll = new DataTransfer();
-        for (const f of files) dtAll.items.add(f);
-        Object.defineProperty(input, 'files', { value: dtAll.files });
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        input.dispatchEvent(new Event('change', { bubbles: true }));
+        dispatchInputFiles(input, files);
         imgLog('info', 'fallback:input-after-dnd:dispatched', { count: files.length });
       } else {
         imgLog('warn', 'fallback:input-after-dnd:not-found');
@@ -606,317 +543,49 @@ async function tryDropImages(urls: string[]) {
   }
 }
 
-async function waitForMediaFeedback(
-  grid: HTMLElement | null,
-  live: HTMLElement | null,
-  beforeCount: number,
-  beforeLiveText: string,
-  timeoutMs = 3000,
-): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (grid && grid.childElementCount > beforeCount) {
-      imgLog('info', 'grid increment detected', {
-        beforeCount,
-        afterCount: grid.childElementCount,
-      });
-      return true;
-    }
-    if (live) {
-      const cur = live.textContent ?? '';
-      if (cur && cur !== beforeLiveText) {
-        imgLog('info', 'live region changed', { before: beforeLiveText, after: cur });
-        return true;
-      }
-    }
-    await new Promise((r) => setTimeout(r, 80));
-  }
-  return false;
-}
+// waitForMediaFeedback déplacé vers lib/upload
 
 // Convertit WEBP/AVIF en JPEG pour compatibilité, garde JPEG/PNG tels quels.
 // Si le type est inconnu, on sniffe la signature binaire pour décider.
 // En cas d’échec de conversion, on renvoie un File basé sur le blob original.
-async function ensureUploadableImage(blob: Blob, baseName: string): Promise<File | null> {
-  let type = (blob.type || '').toLowerCase();
-  imgLog('info', 'ensure:start', { baseName, type, size: blob.size });
-  const acceptable = ['image/jpeg', 'image/jpg', 'image/png'];
-  const asFile = (b: Blob, name: string, t: string) => new File([b], name, { type: t });
-
-  // Sniff si type absent ou générique
-  if (!type || type === 'application/octet-stream') {
-    const sniffed = await sniffImageType(blob).catch(
-      (e) => (imgLog('info', 'ensure:sniff:error', e as unknown), null),
-    );
-    if (sniffed) type = sniffed;
-    imgLog('info', 'ensure:sniffed', { baseName, type });
-  }
-
-  if (acceptable.includes(type)) {
-    const name = ensureExtension(baseName, type.includes('png') ? '.png' : '.jpg');
-    imgLog('debug', 'no conversion needed', { baseName, type, outName: name });
-    return asFile(blob, name, type.includes('png') ? 'image/png' : 'image/jpeg');
-  }
-
-  // Ne tenter la conversion que pour les formats image connus non acceptés (webp/avif)
-  const needsConversion = type === 'image/webp' || type === 'image/avif';
-  if (!needsConversion) {
-    const ext = type.includes('png')
-      ? '.png'
-      : type.includes('jpeg') || type.includes('jpg')
-        ? '.jpg'
-        : type.includes('webp')
-          ? '.webp'
-          : type.includes('avif')
-            ? '.avif'
-            : '.img';
-    const name = ensureExtension(baseName, ext);
-    imgLog('info', 'keeping original blob (no conversion attempted)', { baseName, type, name });
-    const file = asFile(blob, name, type || 'application/octet-stream');
-    imgLog('info', 'ensure:result:original', { name: file.name, type: file.type, size: file.size });
-    return file;
-  }
-
-  // Tenter conversion pour WEBP/AVIF
-  // 1) WebCodecs d'abord (si disponible)
-  const wc1 = await tryWebCodecsTranscodeToJpeg(blob, baseName, type).catch((e) => {
-    imgLog('debug', 'webcodecs attempt failed', { baseName, type, err: (e as Error)?.message });
-    return null;
-  });
-  if (wc1) return wc1;
-
-  // 2) Canvas (createImageBitmap -> HTMLImageElement)
-  try {
-    let width = 0;
-    let height = 0;
-    let drawToCanvas: (ctx: CanvasRenderingContext2D) => void;
-
-    try {
-      const bmp = await createImageBitmap(blob);
-      width = bmp.width;
-      height = bmp.height;
-      drawToCanvas = (ctx) => ctx.drawImage(bmp, 0, 0);
-      imgLog('info', 'convert:bitmap:ok', { w: width, h: height });
-    } catch (e1) {
-      imgLog('debug', 'createImageBitmap failed, fallback to Image()', {
-        baseName,
-        err: (e1 as Error)?.message,
-      });
-      const url = URL.createObjectURL(blob);
-      try {
-        const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const im = new Image();
-          im.onload = () => resolve(im);
-          im.onerror = () => reject(new Error('HTMLImage decode failed'));
-          try {
-            (im as HTMLImageElement).crossOrigin = 'anonymous';
-          } catch {
-            /* ignore */
-          }
-          im.src = url;
-        });
-        width = img.naturalWidth || img.width;
-        height = img.naturalHeight || img.height;
-        drawToCanvas = (ctx) => ctx.drawImage(img, 0, 0);
-        imgLog('info', 'convert:image:ok', { w: width, h: height });
-      } finally {
-        URL.revokeObjectURL(url);
-      }
-    }
-
-    if (!width || !height) throw new Error('no image dimensions');
-
-    let outBlob: Blob | null = null;
-    if ('OffscreenCanvas' in globalThis) {
-      interface OffscreenLike {
-        getContext(type: '2d'): OffscreenCanvasRenderingContext2D | null;
-        convertToBlob(opts: { type: string; quality?: number }): Promise<Blob>;
-        width: number;
-        height: number;
-      }
-      const Ctor = (
-        globalThis as unknown as { OffscreenCanvas: new (w: number, h: number) => OffscreenLike }
-      ).OffscreenCanvas;
-      const canvas = new Ctor(width, height);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('no 2d context');
-      drawToCanvas(ctx as unknown as CanvasRenderingContext2D);
-      outBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.92 });
-      imgLog('info', 'convert:offscreencanvas:toBlob:ok', { size: outBlob.size });
-    } else {
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('no 2d context');
-      drawToCanvas(ctx);
-      outBlob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92),
-      );
-    }
-    if (!outBlob) throw new Error('toBlob returned null');
-    const name = ensureExtension(baseName, '.jpg');
-    imgLog('info', 'converted image to jpeg', { baseName, outName: name, size: outBlob.size });
-    return new File([outBlob], name, { type: 'image/jpeg' });
-  } catch (err) {
-    imgLog('debug', 'canvas conversion error', { baseName, type, err: (err as Error)?.message });
-  }
-
-  // 3) Dernière chance: forcer un JPEG simple (sans décodage)
-  try {
-    const arr = await blob.arrayBuffer();
-    const name = ensureExtension(baseName, '.jpg');
-    const forced = new File([new Uint8Array(arr)], name, { type: 'image/jpeg' });
-    imgLog('info', 'forced jpeg as ultimate fallback', {
-      name: forced.name,
-      type: forced.type,
-      size: forced.size,
-    });
-    return forced;
-  } catch {
-    const ext = type.includes('webp') ? '.webp' : type.includes('avif') ? '.avif' : '.img';
-    const name = ensureExtension(baseName, ext);
-    imgLog('warn', 'image conversion failed completely; using original blob', {
-      baseName,
-      type,
-      outName: name,
-    });
-    return asFile(blob, name, type || 'application/octet-stream');
-  }
-}
-
-// Fallback WebCodecs: transcodage WebP/AVIF -> JPEG sans dépendance externe
-async function tryWebCodecsTranscodeToJpeg(
-  blob: Blob,
-  baseName: string,
-  type: string,
-): Promise<File | null> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const AnyGlobal: any = globalThis as any;
-    if (typeof AnyGlobal.ImageDecoder !== 'function') return null;
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    const decoder = new AnyGlobal.ImageDecoder({ data: bytes, type });
-    const frame = await decoder.decode({ frameIndex: 0 });
-    const w = frame.image.displayWidth || frame.image.codedWidth;
-    const h = frame.image.displayHeight || frame.image.codedHeight;
-    let outBlob: Blob | null = null;
-    if ('OffscreenCanvas' in AnyGlobal) {
-      const Offs = AnyGlobal.OffscreenCanvas as new (w: number, h: number) => OffscreenCanvas;
-      const canvas = new Offs(w, h);
-      const ctx = canvas.getContext('2d') as unknown as OffscreenCanvasRenderingContext2D | null;
-      if (!ctx) return null;
-      (ctx as unknown as CanvasRenderingContext2D).drawImage(frame.image, 0, 0);
-      frame.image.close?.();
-      outBlob = await (
-        canvas as unknown as {
-          convertToBlob: (opts: { type: string; quality?: number }) => Promise<Blob>;
-        }
-      ).convertToBlob({ type: 'image/jpeg', quality: 0.92 });
-    } else {
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
-      (ctx as CanvasRenderingContext2D).drawImage(frame.image, 0, 0);
-      frame.image.close?.();
-      outBlob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.92),
-      );
-    }
-    if (!outBlob) return null;
-    const name = ensureExtension(baseName, '.jpg');
-    return new File([outBlob], name, { type: 'image/jpeg' });
-  } catch {
-    return null;
-  }
-}
-
-// Lecture des premières octets pour identifier le format (PNG, JPEG, WEBP, AVIF)
-async function sniffImageType(blob: Blob): Promise<string | null> {
-  try {
-    const header = new Uint8Array(await blob.slice(0, 32).arrayBuffer());
-    // PNG: 89 50 4E 47 0D 0A 1A 0A
-    if (
-      header[0] === 0x89 &&
-      header[1] === 0x50 &&
-      header[2] === 0x4e &&
-      header[3] === 0x47 &&
-      header[4] === 0x0d &&
-      header[5] === 0x0a &&
-      header[6] === 0x1a &&
-      header[7] === 0x0a
-    )
-      return 'image/png';
-    // JPEG: FF D8 FF
-    if (header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return 'image/jpeg';
-    // WEBP: RIFF....WEBP
-    if (
-      header[0] === 0x52 &&
-      header[1] === 0x49 &&
-      header[2] === 0x46 &&
-      header[3] === 0x46 &&
-      header[8] === 0x57 &&
-      header[9] === 0x45 &&
-      header[10] === 0x42 &&
-      header[11] === 0x50
-    )
-      return 'image/webp';
-    // AVIF: ftyp....avif / mif1 brands
-    if (header.length >= 12) {
-      const isFtyp =
-        header[4] === 0x66 && header[5] === 0x74 && header[6] === 0x79 && header[7] === 0x70;
-      if (isFtyp) {
-        const brand = String.fromCharCode(
-          header[8] as number,
-          header[9] as number,
-          header[10] as number,
-          header[11] as number,
-        );
-        if (brand.startsWith('avif') || brand === 'mif1') return 'image/avif';
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function ensureExtension(name: string, ext: string): string {
-  const clean = name.replace(/\?.*$/, '').replace(/#.*$/, '');
-  if (clean.toLowerCase().endsWith(ext)) return clean;
-  // retire l’ancienne extension si elle n’est pas utile
-  const without = clean.replace(/\.[a-z0-9]+$/i, '');
-  return `${without}${ext}`;
-}
-
-function inferNameFromUrl(u: string): string | null {
-  try {
-    const p = new URL(u);
-    const last = p.pathname.split('/').filter(Boolean).pop() || '';
-    return last || null;
-  } catch {
-    try {
-      const m = u.split('/').filter(Boolean).pop() || '';
-      return m || null;
-    } catch {
-      return null;
-    }
-  }
-}
+// helpers déplacés vers lib/images
 
 function imgLog(level: 'info' | 'warn' | 'debug', ...args: unknown[]) {
-  // logs désactivés
-  void level;
-  void args;
+  /* eslint-disable no-console */
+  try {
+    const ls = (k: string) => {
+      try {
+        return localStorage.getItem(k) === '1';
+      } catch {
+        return false;
+      }
+    };
+    const isE2E =
+      ls('vx:e2e') || (typeof document !== 'undefined' && document.cookie.includes('vx:e2e=1'));
+    const isDebug = ls('vx:debug') || ls('vx:debugImages');
+    if (!(isE2E || isDebug)) return; // reste silencieux en production
+
+    const prefix = '[VX:img]';
+    const fn = level === 'warn' ? console.warn : level === 'debug' ? console.debug : console.log;
+    // Normalise les objets pour éviter [object Object] dans msg.text()
+    const norm = (v: unknown) =>
+      typeof v === 'string'
+        ? v
+        : (() => {
+            try {
+              return JSON.stringify(v);
+            } catch {
+              return String(v);
+            }
+          })();
+    fn(prefix, ...args.map(norm));
+  } catch {
+    /* ignore */
+  }
+  /* eslint-enable no-console */
 }
 
-function jitter(minMs: number, maxMs: number): Promise<void> {
-  const range = Math.max(0, maxMs - minMs);
-  const ms = minMs + Math.floor(Math.random() * (range + 1));
-  return new Promise((r) => setTimeout(r, ms));
-}
+// jitter déplacé vers lib/upload
 
 // (helpers waitForEl/fillLog supprimés; le remplissage est délégué à lib/filler)
 

@@ -1,6 +1,7 @@
 import type { RepublishDraft } from '../../types/draft';
 import { click, setInputValue, waitForElement } from '../dom-utils';
-import { selectFromDropdownByText, selectFromDropdownByTitle, selectSingleByEnter } from '../dropdown';
+import { openDropdown, selectFromDropdownByText, selectFromDropdownByTitle } from '../dropdown';
+import { NO_BRAND_SYNONYMS } from '../i18n';
 
 async function waitForInputValueEquals(
   input: HTMLInputElement,
@@ -46,28 +47,28 @@ async function selectBrandNoBrandQuick(): Promise<boolean> {
     chevronSelector:
       '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
     contentSelector: '[data-testid="brand-select-dropdown-content"]',
-    searchSelector:
-      '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
   } as const;
   const fast = await selectBrandEmptyById();
   if (fast) return true;
-  const NO_BRAND_SYNONYMS = [
-    'sans marque',
-    'no brand',
-    'ohne marke',
-    'sin marca',
-    'senza marca',
-    'zonder merk',
-    'bez marki',
-    'sem marca',
-    'bez značky',
-    'be prekės ženklo',
-  ];
-  for (const name of NO_BRAND_SYNONYMS) {
-    const ok = await selectSingleByEnter(sel, name);
-    if (ok) return true;
-    const ok2 = await selectFromDropdownByText(sel, name);
-    if (ok2) return true;
+  const { input, root } = await openDropdown(sel);
+  if (!input) return false;
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const options = Array.from(
+      (root as HTMLElement | Document).querySelectorAll<HTMLElement>(
+        '[role="option"], .web_ui__Cell__cell[role="button"], li, button',
+      ),
+    );
+    const found = options.find((n) => {
+      const txt = (n.textContent || '').toLowerCase().trim();
+      return NO_BRAND_SYNONYMS.some((syn) => txt === syn.toLowerCase());
+    });
+    if (found) {
+      click(found);
+      document.body.click();
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 40));
   }
   return false;
 }
@@ -81,36 +82,39 @@ async function selectBrandNoBrand(): Promise<boolean> {
     searchSelector:
       '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
   } as const;
-  const NO_BRAND_SYNONYMS = [
-    'sans marque',
-    'no brand',
-    'ohne marke',
-    'sin marca',
-    'senza marca',
-    'zonder merk',
-    'bez marki',
-    'sem marca',
-    'bez značky',
-    'be prekės ženklo',
-  ];
   const input = await waitForElement<HTMLInputElement>(sel.inputSelector);
   if (!input) return false;
   const chevron = (input.parentElement?.querySelector(sel.chevronSelector!) as HTMLElement) || null;
   click(chevron || input);
   await waitForElement<HTMLElement>(sel.contentSelector!, { timeoutMs: 2500 });
+  // Si aucun champ de recherche n'est présent, éviter une boucle coûteuse: cliquer le dernier élément
+  const hasSearch = !!document.querySelector(sel.searchSelector!);
+  if (!hasSearch) {
+    const options = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="option"], .web_ui__Cell__cell[role="button"]'),
+    );
+    const last = options[options.length - 1];
+    if (last) {
+      click(last);
+      document.body.click();
+      return true;
+    }
+  }
   for (const name of NO_BRAND_SYNONYMS) {
     const ok =
       (await selectFromDropdownByText(sel, name)) ||
       (await selectFromDropdownByTitle(
-        { inputSelector: sel.inputSelector, chevronSelector: sel.chevronSelector, contentSelector: sel.contentSelector },
+        {
+          inputSelector: sel.inputSelector,
+          chevronSelector: sel.chevronSelector,
+          contentSelector: sel.contentSelector,
+        },
         name,
       ));
     if (ok) return true;
   }
   const options = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      '[role="option"], .web_ui__Cell__cell[role="button"]',
-    ),
+    document.querySelectorAll<HTMLElement>('[role="option"], .web_ui__Cell__cell[role="button"]'),
   );
   const last = options[options.length - 1];
   if (last) {
@@ -136,7 +140,10 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
   let ok = false;
   const wantNoBrand = !draft.brand || draft.brand.trim() === '';
   if (wantNoBrand) {
-    ok = (await selectBrandEmptyById()) || (await selectBrandNoBrandQuick()) || (await selectBrandNoBrand());
+    ok =
+      (await selectBrandEmptyById()) ||
+      (await selectBrandNoBrandQuick()) ||
+      (await selectBrandNoBrand());
   } else if (draft.brand) {
     ok =
       (await selectFromDropdownByText(
