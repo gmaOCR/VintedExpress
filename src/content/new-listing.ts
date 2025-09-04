@@ -158,7 +158,7 @@ async function tryDropImages(urls: string[]) {
 
       let prepared: File | null = null;
 
-  if (res && res.ok && res.bytes && (res.bytes as ArrayBuffer).byteLength > 0) {
+      if (res && res.ok && res.bytes && (res.bytes as ArrayBuffer).byteLength > 0) {
         imgLog('debug', 'image downloaded', {
           url: res.url,
           contentType: res.contentType,
@@ -253,7 +253,9 @@ async function tryDropImages(urls: string[]) {
                   name: fetchedName,
                   contentType: fetchedType,
                   bytes: ab,
-                })) as { ok: boolean; name?: string; type?: string; bytes?: ArrayBuffer } | undefined;
+                })) as
+                  | { ok: boolean; name?: string; type?: string; bytes?: ArrayBuffer }
+                  | undefined;
                 if (
                   conv &&
                   conv.ok &&
@@ -261,7 +263,9 @@ async function tryDropImages(urls: string[]) {
                   conv.type &&
                   /image\/(jpeg|jpg|png)/i.test(conv.type)
                 ) {
-                  const outType = conv.type.toLowerCase().includes('png') ? 'image/png' : 'image/jpeg';
+                  const outType = conv.type.toLowerCase().includes('png')
+                    ? 'image/png'
+                    : 'image/jpeg';
                   const outName = ensureExtension(
                     fetchedName,
                     outType === 'image/png' ? '.png' : '.jpg',

@@ -20,8 +20,8 @@ onMessage(async (msg) => {
   }
   if (ContentReady.safeParse(msg).success) {
     // Example: react to content script readiness
-  const parsed = ContentReady.parse(msg);
-  void parsed;
+    const parsed = ContentReady.parse(msg);
+    void parsed;
   }
   if (RepublishCreate.safeParse(msg).success) {
     const { payload } = RepublishCreate.parse(msg);
@@ -29,8 +29,8 @@ onMessage(async (msg) => {
     await browser.tabs.create({ url: payload.targetUrl, active: true });
   }
   if (RepublishInjected.safeParse(msg).success) {
-  const { payload } = RepublishInjected.parse(msg);
-  void payload;
+    const { payload } = RepublishInjected.parse(msg);
+    void payload;
   }
   if (ImageFetch.safeParse(msg).success) {
     const { url } = ImageFetch.parse(msg);
@@ -49,7 +49,7 @@ onMessage(async (msg) => {
   if ('type' in msg && msg.type === 'image:download') {
     const url = (msg as { url: string }).url;
     try {
-  // logs désactivés
+      // logs désactivés
       const res = await fetch(url, {
         method: 'GET',
         // éviter des réponses vides liées au cache intermédiaire
@@ -66,7 +66,7 @@ onMessage(async (msg) => {
       const contentType = res.headers.get('content-type') || undefined;
       const buf = await res.arrayBuffer();
       const name = new URL(url).pathname.split('/').pop() || 'image';
-  // logs désactivés
+      // logs désactivés
       if (!buf || buf.byteLength === 0) {
         // logs désactivés
         return { ok: false, url, contentType, name } as const;

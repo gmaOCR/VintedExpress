@@ -14,8 +14,8 @@ const btn = document.getElementById('ping');
 btn?.addEventListener('click', async () => {
   try {
     const res = await sendMessage(Ping, { type: 'ping' });
-  void res;
+    void res;
   } catch (e) {
-  // logs désactivés
+    // logs désactivés
   }
 });

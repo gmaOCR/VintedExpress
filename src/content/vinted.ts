@@ -296,7 +296,7 @@ async function onRepublishClick() {
   try {
     await setTyped(KEY_REPUBLISH_DRAFT, draft, RepublishDraftSchema);
   } catch (e) {
-  /* logs désactivés */
+    /* logs désactivés */
   }
 }
 
@@ -317,7 +317,7 @@ async function onRepublishClick() {
   try {
     enhanceListingPage();
   } catch (e) {
-  /* logs désactivés */
+    /* logs désactivés */
   }
   const observer = new MutationObserver(() => {
     try {
