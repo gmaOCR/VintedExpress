@@ -29,11 +29,22 @@
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage"],
+  "permissions": ["storage", "declarativeNetRequest", "declarativeNetRequestWithHostAccess"],
   "host_permissions": [
     "https://*.vinted.fr/*",
     "https://vinted.fr/*",
     "https://*.vinted.com/*",
-    "https://vinted.com/*"
-  ]
+    "https://vinted.com/*",
+  "https://*.vinted.net/*",
+  "https://*.vintedusercontent.com/*"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ruleset_images",
+        "enabled": true,
+        "path": "dnr-rules.json"
+      }
+    ]
+  }
 }

@@ -11,7 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["vite/client", "node"]
+  "types": ["vite/client", "node", "@playwright/test"]
   },
-  "include": ["src", "vite.config.ts", "tests"]
+  "include": ["src", "vite.config.ts", "playwright.config.ts", "tests"]
 }

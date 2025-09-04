@@ -34,3 +34,52 @@ export type AnyMessage = z.infer<typeof AnyMessage>;
 export type ContentReady = z.infer<typeof ContentReady>;
 export type Ping = z.infer<typeof Ping>;
 export type Pong = z.infer<typeof Pong>;
+
+// Background fetch for images (to bypass CORS in content context)
+export const ImageFetch = z.object({ type: z.literal('image:fetch'), url: z.string().url() });
+export type ImageFetch = z.infer<typeof ImageFetch>;
+export const ImageFetchResult = z.object({ ok: z.boolean(), contentType: z.string().optional() });
+export type ImageFetchResult = z.infer<typeof ImageFetchResult>;
+
+// Full image download (blob as bytes)
+export const ImageDownload = z.object({ type: z.literal('image:download'), url: z.string().url() });
+export type ImageDownload = z.infer<typeof ImageDownload>;
+export const ImageDownloadResult = z.object({
+  ok: z.boolean(),
+  url: z.string().url(),
+  contentType: z.string().optional(),
+  name: z.string().optional(),
+  bytes: z.instanceof(ArrayBuffer).optional(),
+  // fallback when ArrayBuffer cannot be transferred across MV3 messaging
+  bytesB64: z.string().optional(),
+});
+export type ImageDownloadResult = z.infer<typeof ImageDownloadResult>;
+
+// Image conversion to JPEG (done in background)
+export const ImageConvertJpeg = z.object({
+  type: z.literal('image:convert-jpeg'),
+  name: z.string(),
+  contentType: z.string().optional(),
+  bytes: z.instanceof(ArrayBuffer),
+});
+export type ImageConvertJpeg = z.infer<typeof ImageConvertJpeg>;
+export const ImageConvertJpegResult = z.object({
+  ok: z.boolean(),
+  name: z.string().optional(),
+  type: z.string().optional(),
+  bytes: z.instanceof(ArrayBuffer).optional(),
+});
+export type ImageConvertJpegResult = z.infer<typeof ImageConvertJpegResult>;
+
+// Extend the union
+export const AnyMessageExtended = z.union([
+  ContentReady,
+  Ping,
+  Pong,
+  RepublishCreate,
+  RepublishInjected,
+  ImageFetch,
+  ImageDownload,
+  ImageConvertJpeg,
+]);
+export type AnyMessageExtended = z.infer<typeof AnyMessageExtended>;

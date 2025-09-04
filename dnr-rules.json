@@ -1,0 +1,48 @@
+[
+  {
+    "id": 1001,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "referer",
+          "operation": "set",
+          "value": "https://www.vinted.fr/"
+        },
+        {
+          "header": "origin",
+          "operation": "set",
+          "value": "https://www.vinted.fr"
+        }
+      ]
+    },
+    "condition": {
+    "regexFilter": "^https?:\\/\\/(([a-z0-9-]+\\.)?vinted\\.(net|fr|com)|[a-z0-9-]+\\.vintedusercontent\\.com)\\/.*$",
+      "resourceTypes": ["xmlhttprequest", "image"]
+    }
+  },
+  {
+    "id": 1002,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "responseHeaders": [
+        {
+          "header": "access-control-allow-origin",
+      "operation": "set",
+      "value": "*"
+        },
+        {
+          "header": "access-control-allow-credentials",
+          "operation": "set",
+          "value": "true"
+        }
+      ]
+    },
+    "condition": {
+    "regexFilter": "^https?:\\/\\/(([a-z0-9-]+\\.)?vinted\\.(net|fr|com)|[a-z0-9-]+\\.vintedusercontent\\.com)\\/.*$",
+      "resourceTypes": ["xmlhttprequest", "image"]
+    }
+  }
+]

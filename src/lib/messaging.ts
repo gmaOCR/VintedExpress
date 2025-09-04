@@ -1,17 +1,17 @@
 import browser from 'webextension-polyfill';
 import { z } from 'zod';
 
-import { AnyMessage } from '../types/messages';
+import { AnyMessageExtended } from '../types/messages';
 
 export type MessageHandler = (
-  msg: AnyMessage,
+  msg: AnyMessageExtended,
   sender: browser.Runtime.MessageSender,
 ) => Promise<unknown> | unknown;
 
 export function onMessage(handler: MessageHandler) {
   browser.runtime.onMessage.addListener(
     (message: unknown, sender: browser.Runtime.MessageSender) => {
-      const result = AnyMessage.safeParse(message);
+      const result = AnyMessageExtended.safeParse(message);
       if (!result.success) {
         // Ignore messages not matching our schema
         return;

@@ -1,6 +1,6 @@
 import { RepublishDraft } from '../types/draft';
 
-function parsePrice(text: string | null | undefined): { value?: number; currency?: string } {
+export function parsePrice(text: string | null | undefined): { value?: number; currency?: string } {
   if (!text) return {};
   const raw = text.replace(/\s+/g, ' ').trim();
   // Extraire monnaie et valeur, ex: "22,00 €" ou "23,80 €"
@@ -12,7 +12,7 @@ function parsePrice(text: string | null | undefined): { value?: number; currency
   return { value: Number.isFinite(value) ? value : undefined, currency };
 }
 
-function splitColors(text: string | null | undefined): string[] | undefined {
+export function splitColors(text: string | null | undefined): string[] | undefined {
   if (!text) return undefined;
   const v = text
     .split(/,|\/|·|•|\u2022|\u00B7|\s+\/\s+|\s*\+\s*/)
@@ -67,6 +67,16 @@ export function extractDraftFromItemPage(): RepublishDraft {
     .replace(/\s+/g, ' ')
     .trim();
 
+  // Taille
+  const size =
+    (
+      document.querySelector(
+        '[data-testid="item-attributes-size"] [itemprop="size"], [data-testid="item-attributes-size"] .details-list__item-value:last-child',
+      )?.textContent ?? ''
+    )
+      .replace(/\s+/g, ' ')
+      .trim() || undefined;
+
   // Matière
   const material =
     (
@@ -103,7 +113,10 @@ export function extractDraftFromItemPage(): RepublishDraft {
     ),
   )
     .map((el) => el.textContent?.trim() ?? '')
-    .filter((t) => t && t.toLowerCase() !== 'accueil');
+    .filter((t) => {
+      const v = (t || '').trim().toLowerCase();
+      return v && v !== 'accueil' && v !== 'home';
+    });
 
   // Unisexe: présent parfois près du titre ou dans un indicateur de genre
   // Heuristiques: chercher un badge/libellé "Unisexe"/"Unisex" dans l'en-tête
@@ -125,6 +138,7 @@ export function extractDraftFromItemPage(): RepublishDraft {
     priceValue,
     currency,
     condition: condition || undefined,
+    size,
     material,
     color,
     categoryPath: categoryPath.length ? categoryPath : undefined,

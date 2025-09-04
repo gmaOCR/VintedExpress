@@ -1,0 +1,25 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://www.vinted.fr/"
+        },
+        {
+          "header": "Accept",
+          "operation": "set",
+          "value": "image/avif,image/webp,image/*,*/*;q=0.8"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "|https://*.vinted.net/",
+      "resourceTypes": ["image", "xmlhttprequest", "media"]
+    }
+  }
+]

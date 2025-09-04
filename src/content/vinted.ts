@@ -5,52 +5,6 @@ import type { RepublishDraft } from '../types/draft';
 import { KEY_REPUBLISH_DRAFT, RepublishDraftSchema } from '../types/draft';
 import { ContentReady, RepublishCreate, RepublishInjected } from '../types/messages';
 
-(function main() {
-  // Notify background we're ready
-  void sendMessage(ContentReady, { type: 'content:ready', payload: { url: location.href } });
-
-  // Example DOM access kept minimal and safe
-  // Add a data attribute to body for quick visual check in dev
-  try {
-    document.body.setAttribute('data-vx', 'ready');
-  } catch {
-    // ignore
-  }
-
-  // Inject initialement puis observer les mutations (SPA)
-  try {
-    enhanceListingPage();
-  } catch (e) {
-    console.warn('[VX] initial enhance error', e);
-  }
-  const observer = new MutationObserver(() => {
-    try {
-      enhanceListingPage();
-    } catch (e) {
-      // silencieux pour éviter le spam
-    }
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-
-  // Forcer styles visibles et robuste aux thèmes
-  ensureStylesInjected();
-
-  // Heartbeat: si Vinted re-render et supprime notre bouton, on réinsère
-  setInterval(() => {
-    try {
-      if (/\/items\//.test(location.pathname)) {
-        const hasBtn = !!document.getElementById('vx-republish');
-        const del = document.querySelector('[data-testid="item-delete-button"]');
-        if (!hasBtn && del) {
-          enhanceListingPage();
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }, 1500);
-})();
-
 function debug(...args: unknown[]) {
   try {
     // Activez via localStorage.setItem('vx:debug', '1')
@@ -352,3 +306,50 @@ async function onRepublishClick() {
     console.warn('[VX] save draft error', e);
   }
 }
+
+// Exécuter main après la déclaration de toutes les constantes/fonctions pour éviter la TDZ
+(function main() {
+  // Notify background we're ready
+  void sendMessage(ContentReady, { type: 'content:ready', payload: { url: location.href } });
+
+  // Example DOM access kept minimal and safe
+  // Add a data attribute to body for quick visual check in dev
+  try {
+    document.body.setAttribute('data-vx', 'ready');
+  } catch {
+    // ignore
+  }
+
+  // Inject initialement puis observer les mutations (SPA)
+  try {
+    enhanceListingPage();
+  } catch (e) {
+    console.warn('[VX] initial enhance error', e);
+  }
+  const observer = new MutationObserver(() => {
+    try {
+      enhanceListingPage();
+    } catch (e) {
+      // silencieux pour éviter le spam
+    }
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+
+  // Forcer styles visibles et robuste aux thèmes
+  ensureStylesInjected();
+
+  // Heartbeat: si Vinted re-render et supprime notre bouton, on réinsère
+  setInterval(() => {
+    try {
+      if (/\/items\//.test(location.pathname)) {
+        const hasBtn = !!document.getElementById('vx-republish');
+        const del = document.querySelector('[data-testid="item-delete-button"]');
+        if (!hasBtn && del) {
+          enhanceListingPage();
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, 1500);
+})();

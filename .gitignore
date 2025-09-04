@@ -1,6 +1,14 @@
 node_modules/
 dist/
+release/
+*.zip
+*.crx
+*.pem
+*.p12
 *.log
 .DS_Store
 .idea/
 .vscode/
+
+# test coverage output
+coverage/
