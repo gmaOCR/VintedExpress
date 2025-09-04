@@ -1089,49 +1089,15 @@ async function waitForGone(selector: string, timeoutMs = 800): Promise<boolean> 
 }
 
 function log(level: 'info' | 'debug' | 'warn', ...args: unknown[]) {
-  const enabled =
-    level === 'warn' ||
-    localStorage.getItem('vx:debugFill') === '1' ||
-    localStorage.getItem('vx:debug') === '1';
-  const pfx = '[VX:fill]';
-  try {
-    if (level === 'warn') {
-      // eslint-disable-next-line no-console
-      console.warn(pfx, ...args);
-      return;
-    }
-    if (!enabled) return;
-    if (level === 'info') {
-      // eslint-disable-next-line no-console
-      console.info(pfx, ...args);
-    } else {
-      // eslint-disable-next-line no-console
-      console.debug(pfx, ...args);
-    }
-  } catch {
-    /* ignore */
-  }
+  // logging désactivé
+  void level;
+  void args;
 }
 
 function perf(key: string, action: 'start' | 'end') {
-  try {
-    const label = `[VX:fill] ${key}`;
-    const store = (perf as unknown as { _open?: Set<string> })._open || new Set<string>();
-    (perf as unknown as { _open?: Set<string> })._open = store;
-    if (action === 'start') {
-      if (store.has(label)) return;
-      // eslint-disable-next-line no-console
-      console.time?.(label);
-      store.add(label);
-    } else {
-      if (!store.has(label)) return;
-      // eslint-disable-next-line no-console
-      console.timeEnd?.(label);
-      store.delete(label);
-    }
-  } catch {
-    /* ignore */
-  }
+  // métriques désactivées
+  void key;
+  void action;
 }
 
 // visible supprimé (non utilisé)

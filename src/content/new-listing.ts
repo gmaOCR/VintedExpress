@@ -903,31 +903,9 @@ function inferNameFromUrl(u: string): string | null {
 }
 
 function imgLog(level: 'info' | 'warn' | 'debug', ...args: unknown[]) {
-  try {
-    const quiet = localStorage.getItem('vx:quietImages') === '1';
-    const force = localStorage.getItem('vx:forceImageDebug') === '1';
-    const enabled =
-      !quiet ||
-      force ||
-      localStorage.getItem('vx:debugImages') === '1' ||
-      localStorage.getItem('vx:debug') === '1';
-    if (level === 'warn') {
-      // eslint-disable-next-line no-console
-      console.warn('[VX:img]', ...args);
-      return;
-    }
-    if (enabled) {
-      if (level === 'info') {
-        // eslint-disable-next-line no-console
-        console.info('[VX:img]', ...args);
-      } else {
-        // eslint-disable-next-line no-console
-        console.debug('[VX:img]', ...args);
-      }
-    }
-  } catch {
-    // ignore logging errors
-  }
+  // logs désactivés
+  void level;
+  void args;
 }
 
 function jitter(minMs: number, maxMs: number): Promise<void> {

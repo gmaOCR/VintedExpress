@@ -11,7 +11,7 @@ import {
 } from '../types/messages';
 
 browser.runtime.onInstalled.addListener(() => {
-  console.warn('Vinted Express installed');
+  /* logs désactivés */
 });
 
 onMessage(async (msg) => {
@@ -20,8 +20,8 @@ onMessage(async (msg) => {
   }
   if (ContentReady.safeParse(msg).success) {
     // Example: react to content script readiness
-    const parsed = ContentReady.parse(msg);
-    console.warn('Content ready on', parsed.payload.url);
+  const parsed = ContentReady.parse(msg);
+  void parsed;
   }
   if (RepublishCreate.safeParse(msg).success) {
     const { payload } = RepublishCreate.parse(msg);
@@ -29,8 +29,8 @@ onMessage(async (msg) => {
     await browser.tabs.create({ url: payload.targetUrl, active: true });
   }
   if (RepublishInjected.safeParse(msg).success) {
-    const { payload } = RepublishInjected.parse(msg);
-    console.warn('VX injected:', payload.where, 'on', payload.url);
+  const { payload } = RepublishInjected.parse(msg);
+  void payload;
   }
   if (ImageFetch.safeParse(msg).success) {
     const { url } = ImageFetch.parse(msg);
@@ -49,9 +49,7 @@ onMessage(async (msg) => {
   if ('type' in msg && msg.type === 'image:download') {
     const url = (msg as { url: string }).url;
     try {
-      // Diagnostic minimal: log début de téléchargement
-      // eslint-disable-next-line no-console
-      console.info('[VX:bg]', 'image:download:start', { url });
+  // logs désactivés
       const res = await fetch(url, {
         method: 'GET',
         // éviter des réponses vides liées au cache intermédiaire
@@ -68,17 +66,9 @@ onMessage(async (msg) => {
       const contentType = res.headers.get('content-type') || undefined;
       const buf = await res.arrayBuffer();
       const name = new URL(url).pathname.split('/').pop() || 'image';
-      // eslint-disable-next-line no-console
-      console.info('[VX:bg]', 'image:download:response', {
-        url,
-        ok: res.ok,
-        contentType,
-        size: buf?.byteLength ?? 0,
-        name,
-      });
+  // logs désactivés
       if (!buf || buf.byteLength === 0) {
-        // eslint-disable-next-line no-console
-        console.warn('[VX:bg]', 'image:download:empty-bytes', { url, contentType, name });
+        // logs désactivés
         return { ok: false, url, contentType, name } as const;
       }
       // Provide a base64 fallback in case ArrayBuffer transfer is dropped by the messaging layer
@@ -90,8 +80,7 @@ onMessage(async (msg) => {
       }
       return { ok: true, url, contentType, name, bytes: buf, bytesB64 } as const;
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[VX:bg]', 'image:download:error', { url, err: (e as Error)?.message });
+      // logs désactivés
       return { ok: false, url } as const;
     }
   }

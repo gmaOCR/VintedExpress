@@ -6,15 +6,8 @@ import { KEY_REPUBLISH_DRAFT, RepublishDraftSchema } from '../types/draft';
 import { ContentReady, RepublishCreate, RepublishInjected } from '../types/messages';
 
 function debug(...args: unknown[]) {
-  try {
-    // Activez via localStorage.setItem('vx:debug', '1')
-    if (localStorage.getItem('vx:debug') === '1') {
-      // eslint-disable-next-line no-console
-      console.debug('[VX]', ...args);
-    }
-  } catch {
-    // ignore
-  }
+  // logs désactivés
+  void args;
 }
 
 // --- i18n minimal pour le label du bouton ---
@@ -303,7 +296,7 @@ async function onRepublishClick() {
   try {
     await setTyped(KEY_REPUBLISH_DRAFT, draft, RepublishDraftSchema);
   } catch (e) {
-    console.warn('[VX] save draft error', e);
+  /* logs désactivés */
   }
 }
 
@@ -324,7 +317,7 @@ async function onRepublishClick() {
   try {
     enhanceListingPage();
   } catch (e) {
-    console.warn('[VX] initial enhance error', e);
+  /* logs désactivés */
   }
   const observer = new MutationObserver(() => {
     try {
