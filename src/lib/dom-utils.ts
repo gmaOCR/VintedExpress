@@ -9,6 +9,14 @@ export function click(el: Element | null | undefined) {
   (el as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
+export function blurInput(el: HTMLInputElement | HTMLTextAreaElement | null | undefined) {
+  try {
+    el?.blur();
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function waitForElement<T extends Element>(
   selector: string,
   options?: { timeoutMs?: number; intervalMs?: number },

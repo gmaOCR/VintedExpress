@@ -1,6 +1,6 @@
 import type { RepublishDraft } from '../../types/draft';
 import { getTimeout } from '../config';
-import { click, setInputValue, waitForElement } from '../dom-utils';
+import { blurInput, click, setInputValue, waitForElement } from '../dom-utils';
 import {
   forceCloseDropdown,
   openDropdown,
@@ -9,6 +9,7 @@ import {
   selectSingleByEnter,
 } from '../dropdown';
 import { NO_BRAND_SYNONYMS } from '../i18n';
+import { log } from '../metrics';
 
 async function waitForInputValueEquals(
   input: HTMLInputElement,
@@ -137,7 +138,11 @@ async function selectBrandNoBrand(): Promise<boolean> {
 }
 
 export async function fillBrand(draft: RepublishDraft): Promise<void> {
-  if (!('brand' in draft)) return;
+  try {
+    log('info', 'brand:start', { raw: draft.brand });
+  } catch {
+    /* ignore */
+  }
   const rootSel = [
     '[data-testid="brand-select-dropdown-input"]',
     '#brand',
@@ -146,17 +151,25 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
     '[data-testid*="brand"] input',
   ].join(', ');
   const root = await waitForElement<HTMLInputElement>(rootSel, { timeoutMs: 6000 });
-  if (!root) return;
+  if (!root) {
+    log('debug', 'brand:input:not-found');
+    return;
+  }
+  log('debug', 'brand:input:found');
 
   let ok = false;
   const wantNoBrand = !draft.brand || draft.brand.trim() === '';
   if (wantNoBrand) {
+    log('debug', 'brand:want:no-brand');
     ok =
       (await selectBrandEmptyById()) ||
       (await selectBrandNoBrandQuick()) ||
       (await selectBrandNoBrand());
+    log('debug', 'brand:no-brand:selection', ok);
   } else if (draft.brand) {
+    const wanted = draft.brand;
     // 1) Essayer via recherche + Enter (plus rapide quand dispo)
+    log('debug', 'brand:strategy:enter', wanted);
     ok = await selectSingleByEnter(
       {
         inputSelector: rootSel,
@@ -169,36 +182,43 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
       draft.brand,
     );
     // 2) Titre strict puis texte approché
+    log('debug', 'brand:select:enter', ok);
+    if (!ok) log('debug', 'brand:strategy:text/title');
     if (!ok)
-    ok =
+      ok =
         (await selectFromDropdownByText(
-        {
-          inputSelector: rootSel,
-          chevronSelector:
-            '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-          contentSelector: '[data-testid="brand-select-dropdown-content"]',
-          searchSelector:
-            '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
-        },
-        draft.brand,
-      )) ||
+          {
+            inputSelector: rootSel,
+            chevronSelector:
+              '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
+            contentSelector: '[data-testid="brand-select-dropdown-content"]',
+            searchSelector:
+              '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
+          },
+          wanted,
+        )) ||
         (await selectFromDropdownByTitle(
-        {
-          inputSelector: rootSel,
-          chevronSelector:
-            '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-          contentSelector: '[data-testid="brand-select-dropdown-content"]',
-        },
-        draft.brand,
+          {
+            inputSelector: rootSel,
+            chevronSelector:
+              '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
+            contentSelector: '[data-testid="brand-select-dropdown-content"]',
+          },
+          wanted,
         ));
   }
-  if (draft.brand && draft.brand.trim()) {
+  if (!wantNoBrand && draft.brand && draft.brand.trim()) {
     const committed = await waitForInputValueEquals(root, draft.brand, 1200);
-    if (!committed && localStorage.getItem('vx:e2e') === '1') {
+    log('debug', 'brand:committed', committed, 'value', root.value);
+    if (!committed) {
+      // Fallback explicite: assigner la valeur brute (mode e2e ou dernière chance)
       try {
         setInputValue(root, draft.brand);
+        blurInput(root);
         ok = true;
+        log('warn', 'brand:fallback:setInputValue');
       } catch {
+        log('warn', 'brand:fallback:setInputValue:failed');
         /* ignore */
       }
     }
@@ -213,5 +233,6 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
   } catch {
     /* ignore */
   }
+  log('debug', 'brand:done', { success: ok, finalValue: root.value, wantNoBrand });
   void ok;
 }

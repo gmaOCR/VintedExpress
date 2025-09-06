@@ -13,6 +13,15 @@ export const NO_BRAND_SYNONYMS: readonly string[] = [
   'be prekės ženklo',
 ];
 
+// Normalisation simple pour les marques: minuscule + trim + suppression accents
+export function normalizeBrandText(label: string): string {
+  return (label || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
 // Conditions d'état (en -> normalisé) + synonymes multi-langues
 export const CONDITION_SYNONYMS: Record<string, string> = {
   // anglais de base
