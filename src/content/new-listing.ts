@@ -1,6 +1,6 @@
 // Auto-remplissage du formulaire /items/new à partir du brouillon stocké
 import { fillNewItemForm } from '../lib/filler';
-import { ensureExtension, ensureUploadableImage, inferNameFromUrl } from '../lib/images';
+import { ensureExtension, ensureUploadableImage, inferNameFromUrl, prepareFile } from '../lib/images';
 import { sendMessage } from '../lib/messaging';
 import {
   dispatchInputFiles,
@@ -134,7 +134,30 @@ async function tryDropImages(urls: string[]) {
 
   // Télécharger en background pour contourner CORS et reconstituer des File en mémoire
   const files: File[] = [];
-  for (const url of urls) {
+  const enableConcurrency = localStorage.getItem('vx:img:concurrency') === '1';
+  const maxConc = Number(localStorage.getItem('vx:img:max')) || 4;
+  if (enableConcurrency) {
+    // queue simple avec fenêtre de concurrence (maxConc)
+    const queue = urls.slice();
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < Math.max(1, Math.min(maxConc, queue.length)); i++) {
+      workers.push(
+        (async () => {
+          while (queue.length) {
+            const url = queue.shift()!;
+            await processOne(url);
+          }
+        })(),
+      );
+    }
+    await Promise.allSettled(workers);
+  } else {
+    for (const url of urls) {
+      await processOne(url);
+    }
+  }
+
+  async function processOne(url: string) {
     try {
       imgLog('info', 'step:bg-download:request', { url });
       // 1) Tentative via background
@@ -287,7 +310,7 @@ async function tryDropImages(urls: string[]) {
             }
             if (prepared) {
               files.push(prepared);
-              continue; // next URL
+              return; // next URL
             }
           } catch {
             // fall through to in-page fetch
@@ -427,11 +450,24 @@ async function tryDropImages(urls: string[]) {
           size: prepared.size,
         });
       } else {
-        imgLog('warn', 'image download/convert produced empty file, skipping', {
+        imgLog('warn', 'image download/convert produced empty file, will try page prepareFile()', {
           url,
           resOk: res?.ok,
           hasBytes: !!res?.bytes,
         });
+        try {
+          const alt = await prepareFile(url);
+          if (alt && alt.size > 0) {
+            files.push(alt);
+            imgLog('info', 'file prepared via prepareFile fallback', {
+              name: alt.name,
+              type: alt.type,
+              size: alt.size,
+            });
+          }
+        } catch {
+          /* ignore */
+        }
       }
     } catch {
       // ignore individual failures

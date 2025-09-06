@@ -1,7 +1,13 @@
 import type { RepublishDraft } from '../../types/draft';
 import { getTimeout } from '../config';
 import { click, setInputValue, waitForElement } from '../dom-utils';
-import { openDropdown, selectFromDropdownByText, selectFromDropdownByTitle } from '../dropdown';
+import {
+  forceCloseDropdown,
+  openDropdown,
+  selectFromDropdownByText,
+  selectFromDropdownByTitle,
+  selectSingleByEnter,
+} from '../dropdown';
 import { NO_BRAND_SYNONYMS } from '../i18n';
 
 async function waitForInputValueEquals(
@@ -150,8 +156,22 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
       (await selectBrandNoBrandQuick()) ||
       (await selectBrandNoBrand());
   } else if (draft.brand) {
+    // 1) Essayer via recherche + Enter (plus rapide quand dispo)
+    ok = await selectSingleByEnter(
+      {
+        inputSelector: rootSel,
+        chevronSelector:
+          '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
+        contentSelector: '[data-testid="brand-select-dropdown-content"]',
+        searchSelector:
+          '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
+      },
+      draft.brand,
+    );
+    // 2) Titre strict puis texte approché
+    if (!ok)
     ok =
-      (await selectFromDropdownByText(
+        (await selectFromDropdownByText(
         {
           inputSelector: rootSel,
           chevronSelector:
@@ -162,7 +182,7 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
         },
         draft.brand,
       )) ||
-      (await selectFromDropdownByTitle(
+        (await selectFromDropdownByTitle(
         {
           inputSelector: rootSel,
           chevronSelector:
@@ -170,7 +190,7 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
           contentSelector: '[data-testid="brand-select-dropdown-content"]',
         },
         draft.brand,
-      ));
+        ));
   }
   if (draft.brand && draft.brand.trim()) {
     const committed = await waitForInputValueEquals(root, draft.brand, 1200);
@@ -182,6 +202,16 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
         /* ignore */
       }
     }
+  }
+  // Assurer la fermeture du menu si encore ouvert
+  try {
+    await forceCloseDropdown(
+      root,
+      '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
+      '[data-testid="brand-select-dropdown-content"]',
+    );
+  } catch {
+    /* ignore */
   }
   void ok;
 }

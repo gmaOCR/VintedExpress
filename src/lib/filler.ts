@@ -5,14 +5,14 @@ import {
   waitForCategoryCommit,
   waitForUnisexCheckbox,
 } from './category';
-import { click, clickInTheVoid, setInputValue, waitForElement } from './dom-utils';
+import { click, setInputValue, waitForElement } from './dom-utils';
+import { closeAnyDropdowns } from './dropdown';
 import { fillBrand } from './fillers/brand';
 import { fillColor } from './fillers/color';
 import { fillCondition } from './fillers/condition';
 import { fillMaterial } from './fillers/material';
 import { fillPatterns } from './fillers/patterns';
 import { fillSize } from './fillers/size';
-// dropdown utils désormais utilisés via les fillers spécialisés
 import { log, perf } from './metrics';
 
 // --- Entrée principale ---
@@ -70,7 +70,16 @@ export async function fillNewItemForm(draft: RepublishDraft) {
           ok = await waitAndClickCategory(dropdownRootSelector, label, { isLast });
         }
       }
-      // Attendre que l'input catégorie reflète bien la « feuille » (dernier segment)
+      // Démarrer les dépendants immédiatement (ils attendent leurs champs eux-mêmes)
+      const dependents = Promise.allSettled([
+        fillBrand(draft),
+        fillSize(draft),
+        fillCondition(draft),
+        fillColor(draft),
+        fillMaterial(draft),
+        fillPatterns(draft),
+      ]);
+      // Attendre que l'input catégorie reflète bien la « feuille » (dernier segment) en parallèle
       const expectedLeaf = path[path.length - 1] ?? '';
       await waitForCategoryCommit(catInput, expectedLeaf, dropdownRootSelector, {
         mode: 'leaf',
@@ -84,16 +93,7 @@ export async function fillNewItemForm(draft: RepublishDraft) {
         if (unisexInput && !unisexInput.checked) click(unisexInput);
         perf('unisex', 'end');
       }
-      await clickInTheVoid();
-      // Déclencher en parallèle le remplissage des champs dépendants
-      await Promise.allSettled([
-        fillBrand(draft),
-        fillSize(draft),
-        fillCondition(draft),
-        fillColor(draft),
-        fillMaterial(draft),
-        fillPatterns(draft),
-      ]);
+      await dependents;
       startedDependent = true;
     }
     perf('category', 'end');
@@ -111,9 +111,14 @@ export async function fillNewItemForm(draft: RepublishDraft) {
     ]);
   }
 
-  await clickInTheVoid();
+  // Pas de pause inutile: laisser la page réagir naturellement
 
   perf('total', 'end');
+  try {
+    await closeAnyDropdowns();
+  } catch {
+    /* ignore */
+  }
 }
 
 // Section helpers historique supprimée (déplacée dans ./fillers et utilitaires)

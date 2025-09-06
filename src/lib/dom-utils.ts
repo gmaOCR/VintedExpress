@@ -83,3 +83,9 @@ export const normalize = (s: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+
+export function invariant(cond: unknown, msg: string): asserts cond {
+  if (!cond) {
+    throw new Error(msg);
+  }
+}

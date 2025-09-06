@@ -233,10 +233,18 @@ async function ensureUploadableImage(blob: Blob, baseName: string): Promise<File
   }
 }
 
-export {
-  ensureExtension,
-  ensureUploadableImage,
-  inferNameFromUrl,
-  sniffImageType,
-  tryWebCodecsTranscodeToJpeg,
-};
+async function prepareFile(url: string): Promise<File | null> {
+  try {
+    // Essai direct via fetch (page)
+    const r = await fetch(url, { mode: 'cors' as RequestMode });
+    if (!r.ok) throw new Error(`prepareFile fetch failed: ${r.status}`);
+    const blob = await r.blob();
+    const name = inferNameFromUrl(url) || 'image';
+    const file = await ensureUploadableImage(blob, name);
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+export { ensureExtension, ensureUploadableImage, inferNameFromUrl, prepareFile, sniffImageType, tryWebCodecsTranscodeToJpeg };
