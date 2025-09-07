@@ -1,7 +1,13 @@
 // Auto-remplissage du formulaire /items/new à partir du brouillon stocké
 import { fillNewItemForm } from '../lib/filler';
-import { ensureExtension, ensureUploadableImage, inferNameFromUrl, prepareFile } from '../lib/images';
+import {
+  ensureExtension,
+  ensureUploadableImage,
+  inferNameFromUrl,
+  prepareFile,
+} from '../lib/images';
 import { sendMessage } from '../lib/messaging';
+import { promptRotationAngle, rotateImageFile } from '../lib/rotation';
 import {
   dispatchInputFiles,
   dndOneFile,
@@ -131,6 +137,19 @@ async function tryDropImages(urls: string[]) {
     hasGrid: !!document.querySelector('[data-testid="media-select-grid"]'),
   });
   dropHost.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // FEATURE rotation: demander l'angle AVANT tout téléchargement/traitement pour garantir affichage modale
+  let rotationAngle: number | null = null;
+  try {
+    rotationAngle = await promptRotationAngle();
+    if (rotationAngle === null) {
+      imgLog('info', 'rotation:cancelled');
+      return; // annule totalement l'upload
+    }
+    imgLog('info', 'rotation:angle', { angle: rotationAngle });
+  } catch {
+    /* ignore */
+  }
 
   // Télécharger en background pour contourner CORS et reconstituer des File en mémoire
   const files: File[] = [];
@@ -477,7 +496,23 @@ async function tryDropImages(urls: string[]) {
     imgLog('warn', 'no files prepared for upload');
     return;
   }
-  imgLog('info', 'ready to upload files', { count: files.length });
+
+  // Appliquer la rotation à chaque fichier (séquentiel pour limiter la charge mémoire)
+  if (rotationAngle && Math.abs(rotationAngle) > 0.0001) {
+    const rotated: File[] = [];
+    for (const f of files) {
+      try {
+        const r = await rotateImageFile(f, rotationAngle);
+        rotated.push(r);
+      } catch {
+        rotated.push(f);
+      }
+    }
+    files.length = 0;
+    for (const rf of rotated) files.push(rf);
+  }
+
+  imgLog('info', 'ready to upload files', { count: files.length, rotated: rotationAngle });
 
   // 1) Par défaut, préférer la simulation DnD (l’input est moins fiable côté Vinted)
   //    Si vous souhaitez forcer l’input, définissez localStorage.vx:preferInput = '1'.

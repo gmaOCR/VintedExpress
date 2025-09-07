@@ -77,10 +77,10 @@ export const MATERIAL_SYNONYMS: Record<string, string> = {
   pelle: 'Leather',
   leder: 'Leather',
   metal: 'Metal',
-  'métal': 'Metal',
+  métal: 'Metal',
   metallo: 'Metal',
   metalico: 'Metal',
-  'metálico': 'Metal',
+  metálico: 'Metal',
   metall: 'Metal',
   acier: 'Metal',
 };

@@ -106,7 +106,9 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   if (!ok) {
     try {
       log('debug', 'material:strategy:partial');
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     const cells = Array.from(
       document.querySelectorAll<HTMLElement>(
         '[data-testid*="material"] .web_ui__Cell__cell, .web_ui__Cell__cell',
@@ -127,7 +129,7 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
             score: similarityScore(normWanted, c.norm),
           }))
           .sort((a, b) => b.score - a.score);
-  if (scored.length && scored[0] && scored[0].score >= 0.6) candidate = scored[0].c; // seuil empirique
+        if (scored.length && scored[0] && scored[0].score >= 0.6) candidate = scored[0].c; // seuil empirique
       }
       if (candidate) {
         try {
@@ -233,5 +235,5 @@ function similarityScore(a: string, b: string): number {
   const inter = tokensA.filter((t) => tokensB.includes(t)).length;
   const union = new Set([...tokensA, ...tokensB]).size;
   const jaccard = union ? inter / union : 0;
-  return (prefixScore * 0.5 + jaccard * 0.5);
+  return prefixScore * 0.5 + jaccard * 0.5;
 }
