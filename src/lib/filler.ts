@@ -124,40 +124,22 @@ export async function fillNewItemForm(draft: RepublishDraft) {
         if (unisexInput && !unisexInput.checked) click(unisexInput);
         perf('unisex', 'end');
       }
-      // Lancer dépendants seulement après commit (améliore chances que champs existent)
-      const dependents = [
-        (async () => {
-          log('debug', 'dep:brand:start', draft.brand);
-          await fillBrand(draft);
-          log('debug', 'dep:brand:end');
-        })(),
-        (async () => {
-          log('debug', 'dep:size:start', draft.size);
-          await fillSize(draft);
-          log('debug', 'dep:size:end');
-        })(),
-        (async () => {
-          log('debug', 'dep:condition:start', draft.condition);
-          await fillCondition(draft);
-          log('debug', 'dep:condition:end');
-        })(),
-        (async () => {
-          log('debug', 'dep:color:start', draft.color);
-          await fillColor(draft);
-          log('debug', 'dep:color:end');
-        })(),
-        (async () => {
-          log('debug', 'dep:material:start', draft.material);
-          await fillMaterial(draft);
-          log('debug', 'dep:material:end');
-        })(),
-        (async () => {
-          log('debug', 'dep:patterns:start', draft.patterns);
-          await fillPatterns(draft);
-          log('debug', 'dep:patterns:end');
-        })(),
-      ];
-      await Promise.allSettled(dependents);
+      // Séquentiel pour éviter collisions d'ouverture de dropdown / focus
+      const seq = async (label: keyof RepublishDraft, fn: () => Promise<void>) => {
+        log('debug', `dep:${label}:start`);
+        try {
+          await fn();
+        } catch (e) {
+          log('warn', `dep:${label}:error`, { message: (e as Error)?.message });
+        }
+        log('debug', `dep:${label}:end`);
+      };
+      await seq('brand', () => fillBrand(draft));
+      await seq('size', () => fillSize(draft));
+      await seq('condition', () => fillCondition(draft));
+      await seq('color', () => fillColor(draft));
+      await seq('material', () => fillMaterial(draft));
+      await seq('patterns', () => fillPatterns(draft));
       startedDependent = true;
     }
     perf('category', 'end');
@@ -166,38 +148,21 @@ export async function fillNewItemForm(draft: RepublishDraft) {
   // Si aucune catégorie n'a été traitée (ou absente), remplir tout de même les champs dépendants
   if (!startedDependent) {
     log('debug', 'dependents:direct');
-    await Promise.allSettled([
-      (async () => {
-        log('debug', 'dep:brand:start', draft.brand);
-        await fillBrand(draft);
-        log('debug', 'dep:brand:end');
-      })(),
-      (async () => {
-        log('debug', 'dep:size:start', draft.size);
-        await fillSize(draft);
-        log('debug', 'dep:size:end');
-      })(),
-      (async () => {
-        log('debug', 'dep:condition:start', draft.condition);
-        await fillCondition(draft);
-        log('debug', 'dep:condition:end');
-      })(),
-      (async () => {
-        log('debug', 'dep:color:start', draft.color);
-        await fillColor(draft);
-        log('debug', 'dep:color:end');
-      })(),
-      (async () => {
-        log('debug', 'dep:material:start', draft.material);
-        await fillMaterial(draft);
-        log('debug', 'dep:material:end');
-      })(),
-      (async () => {
-        log('debug', 'dep:patterns:start', draft.patterns);
-        await fillPatterns(draft);
-        log('debug', 'dep:patterns:end');
-      })(),
-    ]);
+    const seq = async (label: keyof RepublishDraft, fn: () => Promise<void>) => {
+      log('debug', `dep:${label}:start`);
+      try {
+        await fn();
+      } catch (e) {
+        log('warn', `dep:${label}:error`, { message: (e as Error)?.message });
+      }
+      log('debug', `dep:${label}:end`);
+    };
+    await seq('brand', () => fillBrand(draft));
+    await seq('size', () => fillSize(draft));
+    await seq('condition', () => fillCondition(draft));
+    await seq('color', () => fillColor(draft));
+    await seq('material', () => fillMaterial(draft));
+    await seq('patterns', () => fillPatterns(draft));
   }
 
   // Pas de pause inutile: laisser la page réagir naturellement

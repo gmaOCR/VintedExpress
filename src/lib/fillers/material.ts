@@ -81,6 +81,22 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   } catch {
     /* ignore */
   }
+  // Force une valeur lisible si succès mais input resté vide (cas multi-select sans chip rendu)
+  if (ok && !root.value) {
+    try {
+      const chip = document.querySelector<HTMLElement>(
+        '[data-testid*="material"] .web_ui__Tag__tag, .web_ui__Tag__tag',
+      );
+      const candidate = chip?.textContent?.trim() || labels[0] || draft.material;
+      if (candidate) {
+        setInputValue(root, candidate);
+        blurInput(root);
+        log('debug', 'material:forceValue', { candidate });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   log('debug', 'material:done', { success: ok, finalValue: root.value });
 }
 

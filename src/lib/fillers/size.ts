@@ -48,5 +48,25 @@ export async function fillSize(draft: RepublishDraft): Promise<void> {
   } catch {
     /* ignore */
   }
+  // Force value si succès logique mais input resté vide
+  if (ok && !root.value) {
+    try {
+      const selectedTitle = document
+        .querySelector<HTMLElement>(
+          '[data-testid="size-select-dropdown-content"] .web_ui__Cell__cell.is-selected .web_ui__Cell__title',
+        )
+        ?.textContent?.trim();
+      const candidate = selectedTitle || draft.size;
+      if (candidate) {
+        root.value = candidate;
+        root.dispatchEvent(new Event('input', { bubbles: true }));
+        root.dispatchEvent(new Event('change', { bubbles: true }));
+        blurInput(root);
+        log('debug', 'size:forceValue', { candidate });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
   log('debug', 'size:done', { success: ok, finalValue: root.value });
 }
