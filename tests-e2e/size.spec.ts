@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
+/* eslint-disable simple-import-sort/imports */
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 // Helpers commune: stub chrome + draft injection
 type DraftLike = { title: string; description: string; images: string[]; size?: string };
@@ -131,21 +133,42 @@ test('size fallback forceValue when UI does not populate input', async ({ page }
     }
   });
   await page.goto(url);
-  await page.addScriptTag({ path: 'dist/src/content/new-listing.js', type: 'module' });
-  // Lancement manual fill
+  // Injecter le script content inline (évite l'interception route 204)
+  const scriptContent = readFileSync('dist/src/content/new-listing.js', 'utf8');
+  await page.addScriptTag({ content: scriptContent, type: 'module' });
+  // Vérifier présence de l'API e2e
+  const hasInvoke = await page.evaluate(() => {
+    const w = window as unknown as { __vx_invokeFill?: unknown };
+    return typeof w.__vx_invokeFill === 'function';
+  });
+  expect(hasInvoke).toBe(true);
+  // Déclencher manuellement (plus rapide que d'attendre le bootstrap chrome.storage)
   await page.evaluate(() => {
     const w = window as unknown as { __vx_invokeFill?: (d: DraftLike) => Promise<void> };
-    return (
-      w.__vx_invokeFill &&
-      w.__vx_invokeFill({ title: 't', description: 'd', images: [], size: 'M' })
-    );
+    return w.__vx_invokeFill?.({ title: 't', description: 'd', images: [], size: 'M' });
   });
+  // Attendre que le titre soit rempli (preuve fillNewItemForm exécuté)
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('input[name="title"]') as HTMLInputElement | null;
+      return !!el && el.value === 't';
+    },
+    { timeout: 5000 },
+  );
   // Ouvrir dropdown pour laisser le script opérer
   await page.click('[data-testid="size-select-dropdown-input"]');
   // Attendre que script ait tenté sélection
-  await page.waitForTimeout(600);
-  // Vérifier value finale
-  await expect(page.locator('[data-testid="size-select-dropdown-input"]')).toHaveValue('M');
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector(
+        '[data-testid="size-select-dropdown-input"]',
+      ) as HTMLInputElement | null;
+      return !!el && el.value.trim().length > 0;
+    },
+    { timeout: 3000 },
+  );
+  const finalVal = await page.locator('[data-testid="size-select-dropdown-input"]').inputValue();
+  expect(finalVal).toBe('M');
 });
 
 // Test 2: mismatch (option "Medium" uniquement) -> fallback doit mettre "M" (valeur draft)
@@ -162,15 +185,34 @@ test('size mismatch uses draft value fallback', async ({ page }) => {
     }
   });
   await page.goto(url);
-  await page.addScriptTag({ path: 'dist/src/content/new-listing.js', type: 'module' });
+  const scriptContent = readFileSync('dist/src/content/new-listing.js', 'utf8');
+  await page.addScriptTag({ content: scriptContent, type: 'module' });
+  const hasInvoke = await page.evaluate(() => {
+    const w = window as unknown as { __vx_invokeFill?: unknown };
+    return typeof w.__vx_invokeFill === 'function';
+  });
+  expect(hasInvoke).toBe(true);
   await page.evaluate(() => {
     const w = window as unknown as { __vx_invokeFill?: (d: DraftLike) => Promise<void> };
-    return (
-      w.__vx_invokeFill &&
-      w.__vx_invokeFill({ title: 't', description: 'd', images: [], size: 'M' })
-    );
+    return w.__vx_invokeFill?.({ title: 't', description: 'd', images: [], size: 'M' });
   });
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('input[name="title"]') as HTMLInputElement | null;
+      return !!el && el.value === 't';
+    },
+    { timeout: 5000 },
+  );
   await page.click('[data-testid="size-select-dropdown-input"]');
-  await page.waitForTimeout(600);
-  await expect(page.locator('[data-testid="size-select-dropdown-input"]')).toHaveValue('M');
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector(
+        '[data-testid="size-select-dropdown-input"]',
+      ) as HTMLInputElement | null;
+      return !!el && el.value.trim().length > 0;
+    },
+    { timeout: 3000 },
+  );
+  const finalVal = await page.locator('[data-testid="size-select-dropdown-input"]').inputValue();
+  expect(finalVal).toBe('M');
 });

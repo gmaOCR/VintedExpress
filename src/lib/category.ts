@@ -9,42 +9,86 @@ export async function selectCategoryPathMinimal(
   dropdownRootSelector: string,
   path: string[],
 ): Promise<{ steps: { label: string; ok: boolean }[]; allOk: boolean }> {
-  const root = (document.querySelector(dropdownRootSelector) as HTMLElement) ?? document.body;
+  const rootSel = dropdownRootSelector;
+  const container = (document.querySelector(rootSel) as HTMLElement) ?? document.body;
   const steps: { label: string; ok: boolean }[] = [];
-  for (const label of path) {
+  for (let i = 0; i < path.length; i++) {
+    const raw = path[i];
+    const label = raw ?? '';
     const wanted = normalize(label);
-    let ok = clickFirstMatch(root, wanted);
+    let ok = false;
+    const deadline = Date.now() + 1800;
+    while (!ok && Date.now() < deadline) {
+      ok = clickFirstMatch(container, wanted);
+      if (ok) break;
+      // Fuzzy tentative si pas trouvé strictement (accents / casse gérés par normalize déjà)
+      ok = clickFirstMatch(container, wanted, { fuzzy: true });
+      if (ok) break;
+      await delay(90);
+    }
+    // Tentative recherche si toujours pas ok
     if (!ok) {
-      const search = root.querySelector<HTMLInputElement>('#catalog-search-input');
+      const search = container.querySelector<HTMLInputElement>('#catalog-search-input');
       if (search) {
         try {
           search.value = '';
           search.dispatchEvent(new Event('input', { bubbles: true }));
-          await delay(20);
+          await delay(30);
           search.value = label;
           search.dispatchEvent(new Event('input', { bubbles: true }));
-          await delay(140);
-          ok = clickFirstMatch(root, wanted);
+          await delay(220);
+          ok =
+            clickFirstMatch(container, wanted) ||
+            clickFirstMatch(container, wanted, { fuzzy: true });
         } catch {
           /* ignore */
         }
       }
     }
+    if (!ok) {
+      // Loguer les 25 premiers titres disponibles pour diagnostic
+      try {
+        const titles = Array.from(
+          container.querySelectorAll<HTMLElement>('.web_ui__Cell__title, [data-testid$="--title"]'),
+        )
+          .slice(0, 25)
+          .map((t) => t.textContent?.trim() || '');
+        log('warn', 'category:step:unmatched', { label, wanted, titles });
+      } catch {
+        /* ignore */
+      }
+    }
     steps.push({ label, ok });
-    log('debug', 'category:min:step', { label, ok });
+    log('debug', 'category:min:step', { label, ok, index: i });
     if (!ok) break;
-    await delay(80); // laisser apparaître la colonne suivante
+    // Attendre apparition éventuelle d'une nouvelle colonne (signature titres change)
+    await delay(120);
   }
   const allOk = steps.length === path.length && steps.every((s) => s.ok);
   log('info', 'category:min:summary', { allOk, steps });
   return { steps, allOk };
 }
 
-function clickFirstMatch(root: HTMLElement, wanted: string): boolean {
+function clickFirstMatch(
+  root: HTMLElement,
+  wanted: string,
+  opts: { fuzzy?: boolean } = {},
+): boolean {
   const titles = Array.from(
     root.querySelectorAll<HTMLElement>('.web_ui__Cell__title, [data-testid$="--title"]'),
   );
-  const match = titles.find((t) => normalize(t.textContent || '') === wanted);
+  const match = titles.find((t) => {
+    const txt = normalize(t.textContent || '');
+    if (opts.fuzzy)
+      return (
+        txt === wanted ||
+        txt.startsWith(wanted) ||
+        wanted.startsWith(txt) ||
+        txt.includes(wanted) ||
+        wanted.includes(txt)
+      );
+    return txt === wanted;
+  });
   if (!match) return false;
   const clickable = match.closest<HTMLElement>(
     '.web_ui__Cell__cell[role="button"], [role="option"], li, button',

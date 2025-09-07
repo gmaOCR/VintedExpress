@@ -76,6 +76,13 @@ export const MATERIAL_SYNONYMS: Record<string, string> = {
   cuero: 'Leather',
   pelle: 'Leather',
   leder: 'Leather',
+  metal: 'Metal',
+  'métal': 'Metal',
+  metallo: 'Metal',
+  metalico: 'Metal',
+  'metálico': 'Metal',
+  metall: 'Metal',
+  acier: 'Metal',
 };
 
 export function normalizeMaterial(label: string): string {

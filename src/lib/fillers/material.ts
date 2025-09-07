@@ -34,46 +34,148 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   const materials = splitList(draft.material).map((m) => normalizeMaterial(m));
   const labels = materials.length ? materials : [normalizeMaterial(draft.material)];
   log('debug', 'material:labels', labels);
-  let ok = await multiSelectByEnter(sel, labels);
-  log('debug', 'material:multiSelectByEnter', ok);
-  if (!ok) {
-    log('debug', 'material:strategy:titles');
-    ok = await multiSelectByTitles(sel, labels);
-    log('debug', 'material:multiSelectByTitles', ok);
+  let ok = false;
+  // 1) Stratégies standard multi-select
+  {
+    let s = await multiSelectByEnter(sel, labels);
+    log('debug', 'material:multiSelectByEnter', s);
+    if (!s) {
+      log('debug', 'material:strategy:titles');
+      s = await multiSelectByTitles(sel, labels);
+      log('debug', 'material:multiSelectByTitles', s);
+    }
+    if (!s) {
+      log('debug', 'material:strategy:titlesLoose');
+      s = await multiSelectByTitlesLoose(sel, labels);
+      log('debug', 'material:multiSelectByTitlesLoose', s);
+    }
+    ok = s;
   }
-  if (!ok) {
-    log('debug', 'material:strategy:titlesLoose');
-    ok = await multiSelectByTitlesLoose(sel, labels);
-    log('debug', 'material:multiSelectByTitlesLoose', ok);
-  }
-  try {
+  // 2) Attente courte pour apparition des chips / cases cochées
+  const successCheck = () => {
     const chips = Array.from(
-      (root.closest('.web_ui__Input__input') || document).querySelectorAll<HTMLElement>(
+      document.querySelectorAll<HTMLElement>(
         '[data-testid*="material"] .web_ui__Tag__tag, .web_ui__Tag__tag',
       ),
     )
-      .slice(0, 15)
       .map((c) => (c.textContent || '').trim())
       .filter(Boolean);
-    if (chips.length) log('debug', 'material:chips', { count: chips.length, chips });
-    // Considérer la présence de chips comme succès même si input.value vide (multi-select UX)
-    if (!ok && chips.length > 0) ok = true;
-    // Si succès déclaré mais aucune trace (ni chips ni valeur), on forcera fallback plus bas
-    if (ok && chips.length === 0 && !root.value) {
-      log('debug', 'material:commit:missingValue');
-      ok = false;
+    const checked = Array.from(
+      document.querySelectorAll<HTMLInputElement>(
+        '[data-testid*="material"] input[type="checkbox"], input[type="checkbox"]',
+      ),
+    ).filter((i) => i.checked);
+    const normChips = chips.map((c) => normalizeMaterial(c));
+    const haveAll = labels.every((l) => normChips.includes(normalizeMaterial(l)));
+    return { chips, checkedCount: checked.length, haveAll };
+  };
+  const waitDeadline = Date.now() + 800;
+  let snapshot = successCheck();
+  while (Date.now() < waitDeadline && !snapshot.haveAll) {
+    await new Promise((r) => setTimeout(r, 90));
+    snapshot = successCheck();
+  }
+  if (snapshot.chips.length) log('debug', 'material:chips', snapshot);
+  if (snapshot.haveAll) ok = true;
+  // 3) Si toujours pas ok: tentative ciblée cell par cell (checkbox direct)
+  if (!ok) {
+    for (const wanted of labels) {
+      const normWanted = normalizeMaterial(wanted);
+      const cell = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-testid*="material"] .web_ui__Cell__cell, .web_ui__Cell__cell',
+        ),
+      ).find((c) => normalizeMaterial(c.textContent || '') === normWanted);
+      if (cell) {
+        try {
+          cell.click();
+          const box = cell.querySelector<HTMLInputElement>('input[type="checkbox"]');
+          if (box && !box.checked) {
+            box.click();
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     }
-  } catch {
-    /* ignore */
+    // Re-vérification
+    snapshot = successCheck();
+    if (snapshot.haveAll) ok = true;
+  }
+  // 3bis) Correspondance partielle / similarité simple si échec stricte
+  if (!ok) {
+    try {
+      log('debug', 'material:strategy:partial');
+    } catch { /* ignore */ }
+    const cells = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        '[data-testid*="material"] .web_ui__Cell__cell, .web_ui__Cell__cell',
+      ),
+    ).map((c) => ({ el: c, raw: (c.textContent || '').trim() }));
+    const normCells = cells.map((c) => ({ ...c, norm: normalizeMaterial(c.raw) }));
+    for (const wanted of labels) {
+      const normWanted = normalizeMaterial(wanted);
+      // Cherche inclusion mutuelle
+      let candidate = normCells.find(
+        (c) => c.norm.includes(normWanted) || normWanted.includes(c.norm),
+      );
+      if (!candidate) {
+        // Similarité naïve: distance de longueur ou ratio commun
+        const scored = normCells
+          .map((c) => ({
+            c,
+            score: similarityScore(normWanted, c.norm),
+          }))
+          .sort((a, b) => b.score - a.score);
+  if (scored.length && scored[0] && scored[0].score >= 0.6) candidate = scored[0].c; // seuil empirique
+      }
+      if (candidate) {
+        try {
+          candidate.el.click();
+          const box = candidate.el.querySelector<HTMLInputElement>('input[type="checkbox"]');
+          if (box && !box.checked) box.click();
+          log('debug', 'material:partial:applied', { wanted, candidate: candidate.raw });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    snapshot = successCheck();
+    if (snapshot.haveAll) ok = true;
+  }
+  // 4) Dernier espoir: si rien marqué mais on a une seule valeur, forcer input pour lisibilité
+  if (!ok) {
+    try {
+      const chipsAfter = successCheck();
+      if (chipsAfter.haveAll) {
+        ok = true;
+      } else if (labels.length === 1) {
+        log('warn', 'material:fallback:setInputValue');
+        try {
+          setInputValue(root, labels[0] || draft.material || '');
+          blurInput(root);
+          ok = true;
+        } catch {
+          log('warn', 'material:fallback:setInputValue:failed');
+        }
+      }
+    } catch {
+      /* ignore */
+    }
   }
   if (!ok) {
-    log('warn', 'material:fallback:setInputValue');
+    // Si toujours pas ok, log titres candidats pour debug terrain
     try {
-      setInputValue(root, draft.material);
-      blurInput(root);
-      ok = true;
+      const titles = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-testid*="material"] .web_ui__Cell__title, .web_ui__Cell__title',
+        ),
+      )
+        .slice(0, 30)
+        .map((t) => t.textContent?.trim() || '');
+      log('warn', 'material:failure:titles', { labels, titles });
     } catch {
-      log('warn', 'material:fallback:setInputValue:failed');
+      /* ignore */
     }
   }
   try {
@@ -81,13 +183,24 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
   } catch {
     /* ignore */
   }
-  // Force une valeur lisible si succès mais input resté vide (cas multi-select sans chip rendu)
+  // Force une valeur lisible si succès mais input resté vide
   if (ok && !root.value) {
     try {
       const chip = document.querySelector<HTMLElement>(
         '[data-testid*="material"] .web_ui__Tag__tag, .web_ui__Tag__tag',
       );
-      const candidate = chip?.textContent?.trim() || labels[0] || draft.material;
+      let candidate = chip?.textContent?.trim();
+      if (!candidate) {
+        // Cherche la cellule sélectionnée pour récupérer la forme exacte (accents)
+        const selectedCell = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '[data-testid*="material"] .web_ui__Cell__cell.is-selected, .web_ui__Cell__cell.is-selected',
+          ),
+        )
+          .map((c) => c.textContent?.trim() || '')
+          .find(Boolean);
+        candidate = selectedCell || labels[0] || draft.material;
+      }
       if (candidate) {
         setInputValue(root, candidate);
         blurInput(root);
@@ -105,4 +218,20 @@ function splitList(text: string): string[] {
     .split(/,|\/|·|\u00B7|\u2022|\s+\/\s+|\s*\+\s*/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+// Similarité très simple: ratio du plus long préfixe commun / longueur max, pondéré par Jaccard sur tokens
+function similarityScore(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const minLen = Math.min(a.length, b.length);
+  let prefix = 0;
+  while (prefix < minLen && a[prefix] === b[prefix]) prefix++;
+  const prefixScore = prefix / Math.max(a.length, b.length);
+  const tokensA = Array.from(new Set(a.split(/\s+/)));
+  const tokensB = Array.from(new Set(b.split(/\s+/)));
+  const inter = tokensA.filter((t) => tokensB.includes(t)).length;
+  const union = new Set([...tokensA, ...tokensB]).size;
+  const jaccard = union ? inter / union : 0;
+  return (prefixScore * 0.5 + jaccard * 0.5);
 }
