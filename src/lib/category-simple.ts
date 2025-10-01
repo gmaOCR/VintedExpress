@@ -5,37 +5,63 @@ import { click, delay, normalize, waitForElement } from './dom-utils';
 import { log } from './metrics';
 
 /**
- * Ouvre le dropdown de catégorie et retourne l'input
+ * Ouvre le dropdown en cliquant sur l'input
  */
 export async function openCategoryDropdown(): Promise<HTMLInputElement | null> {
   const input = await waitForElement<HTMLInputElement>(
-    'input[name="category"], #category, [data-testid="catalog-select-dropdown-input"], [data-testid="catalog-select-input"]',
+    '[data-testid="catalog-select-dropdown-input"]',
     { timeoutMs: 4000 },
   );
-  if (!input) return null;
+  if (!input) {
+    log('warn', 'category:input:not-found');
+    return null;
+  }
 
-  const chevron = input.parentElement?.querySelector(
-    '[data-testid="catalog-select-dropdown-chevron-down"]',
-  ) as HTMLElement | null;
+  // Utiliser la fonction click() qui dispatch des événements
+  click(input);
+  await delay(200);
 
-  click(chevron || input);
-  await delay(150);
+  // Attendre que le dropdown apparaisse
+  const dropdown = await waitForElement('[data-testid="catalog-select-dropdown-content"]', {
+    timeoutMs: 3000,
+  });
 
+  if (!dropdown) {
+    log('warn', 'category:dropdown:failed');
+    return null;
+  }
+
+  log('debug', 'category:dropdown:opened');
   return input;
 }
 
 /**
  * Trouve et clique sur une option de catégorie par son libellé
  */
-function findAndClickOption(label: string): boolean {
+function findAndClickOption(label: string, shouldLog = false): boolean {
   const wanted = normalize(label);
 
-  // Chercher tous les titres visibles (production + tests)
+  // Chercher le dropdown de catégorie spécifiquement
+  const dropdown = document.querySelector('[data-testid="catalog-select-dropdown-content"]');
+  const searchRoot = dropdown || document.body;
+
+  // Chercher tous les titres visibles dans le dropdown
   const titles = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      '.web_ui__Cell__title, [data-testid$="--title"], [data-testid$="-label"]',
+    searchRoot.querySelectorAll<HTMLElement>(
+      '.web_ui__Cell__title, [data-testid$="--title"], [data-testid$="-label"], [data-testid*="catalog-select-dropdown-row"]',
     ),
   );
+
+  // Log pour debug la première fois
+  if (shouldLog) {
+    const available = titles.slice(0, 15).map((t) => normalize(t.textContent || ''));
+    log('debug', 'category:available-options', {
+      wanted,
+      available,
+      totalCount: titles.length,
+      hasDropdown: !!dropdown,
+    });
+  }
 
   for (const titleEl of titles) {
     const text = normalize(titleEl.textContent || '');
@@ -43,7 +69,7 @@ function findAndClickOption(label: string): boolean {
 
     // Trouver l'élément cliquable parent
     const clickable = titleEl.closest<HTMLElement>(
-      '.web_ui__Cell__cell[role="button"], [role="option"], button, li',
+      '.web_ui__Cell__cell[role="button"], [role="option"], button, li, [data-testid^="catalog-select-dropdown-row-button"]',
     );
 
     if (clickable) {
@@ -68,21 +94,23 @@ export async function selectCategoryPath(path: string[]): Promise<boolean> {
 
     const maxWait = Date.now() + 3000;
     let clicked = false;
+    let attempts = 0;
 
     // Attendre que l'option apparaisse et cliquer
     while (!clicked && Date.now() < maxWait) {
-      clicked = findAndClickOption(label);
+      clicked = findAndClickOption(label, attempts === 0); // Log seulement au premier essai
+      attempts++;
       if (!clicked) {
         await delay(100);
       }
     }
 
     if (!clicked) {
-      log('warn', 'category:step:failed', { label, index: i });
+      log('warn', 'category:step:failed', { label, index: i, attempts });
       return false;
     }
 
-    log('debug', 'category:step:ok', { label, index: i });
+    log('debug', 'category:step:ok', { label, index: i, attempts });
     await delay(150); // Attendre que la colonne suivante apparaisse
   }
 

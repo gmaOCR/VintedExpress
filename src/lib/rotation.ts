@@ -16,6 +16,13 @@ export async function promptRotationAngle(): Promise<number | null> {
   return new Promise<number | null>((resolve) => {
     const existing = document.getElementById('vx-rotate-modal');
     if (existing) existing.remove();
+
+    // Désactiver temporairement l'observer du formulaire
+    const formObserver = (window as { __vx_formObserver?: MutationObserver }).__vx_formObserver;
+    if (formObserver) {
+      formObserver.disconnect();
+    }
+
     const previousActive = document.activeElement as
       | (HTMLInputElement | HTMLTextAreaElement | HTMLElement)
       | null;
@@ -69,6 +76,10 @@ export async function promptRotationAngle(): Promise<number | null> {
 
     const restorePreviousFocus = () => {
       if (!previousActive) return;
+
+      // Ne restaurer le focus QUE si l'élément est encore présent dans le DOM
+      if (!document.contains(previousActive)) return;
+
       try {
         previousActive.focus({ preventScroll: true } as FocusOptions);
       } catch {
@@ -78,17 +89,21 @@ export async function promptRotationAngle(): Promise<number | null> {
           /* ignore */
         }
       }
+
+      // NE PAS restaurer la valeur si elle n'a pas changé (évite trigger d'événements inutiles)
       if (
         previousValue != null &&
         (previousActive instanceof HTMLInputElement ||
           previousActive instanceof HTMLTextAreaElement)
       ) {
-        if (previousActive.value !== previousValue) {
+        const currentValue = previousActive.value;
+        if (currentValue !== previousValue) {
+          // Seulement restaurer si vraiment modifiée
           previousActive.value = previousValue;
-          previousActive.dispatchEvent(new Event('input', { bubbles: true }));
-          previousActive.dispatchEvent(new Event('change', { bubbles: true }));
+          // NE PAS dispatcher d'événements - laisse React tranquille
         }
-        if (previousSelection) {
+        if (previousSelection && currentValue === previousValue) {
+          // Seulement restaurer la sélection si la valeur n'a pas changé
           try {
             const start =
               typeof previousSelection.start === 'number'
@@ -113,6 +128,15 @@ export async function promptRotationAngle(): Promise<number | null> {
       swallowEvents.forEach((evt) => overlay.removeEventListener(evt, swallow, true));
       overlay.remove();
       restorePreviousFocus();
+
+      // Réactiver l'observer du formulaire
+      if (formObserver) {
+        formObserver.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+      }
+
       resolve(val);
     };
 

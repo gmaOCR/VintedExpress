@@ -23,6 +23,19 @@ export async function fillCondition(draft: RepublishDraft): Promise<void> {
   }
   log('debug', 'condition:input:found');
   const wanted = normalizeCondition(draft.condition);
+
+  // Pré-semer la valeur immédiatement
+  if (!root.value && wanted) {
+    try {
+      root.value = wanted;
+      root.dispatchEvent(new Event('input', { bubbles: true }));
+      root.dispatchEvent(new Event('change', { bubbles: true }));
+      log('debug', 'condition:preseed', { value: root.value });
+    } catch {
+      /* ignore */
+    }
+  }
+
   let ok = await selectSingleByEnter(sel, wanted);
   log('debug', 'condition:selectSingleByEnter', ok);
   if (!ok)
@@ -47,10 +60,40 @@ export async function fillCondition(draft: RepublishDraft): Promise<void> {
       log('warn', 'condition:fallback:setInputValue:failed');
     }
   }
+
+  log('debug', 'condition:post-initial-phase', { ok, current: root.value });
+
+  // Si succès logique mais valeur vide, forcer
+  if (ok && !root.value) {
+    try {
+      root.value = wanted;
+      root.dispatchEvent(new Event('input', { bubbles: true }));
+      root.dispatchEvent(new Event('change', { bubbles: true }));
+      blurInput(root);
+      log('warn', 'condition:forceValue:immediate', { candidate: wanted });
+    } catch {
+      /* ignore */
+    }
+  }
+
   try {
     await forceCloseDropdown(root, sel.chevronSelector, sel.contentSelector);
   } catch {
     /* ignore */
   }
+
+  // Dernier filet de sécurité
+  if (!root.value && wanted) {
+    try {
+      root.value = wanted;
+      root.dispatchEvent(new Event('input', { bubbles: true }));
+      root.dispatchEvent(new Event('change', { bubbles: true }));
+      blurInput(root);
+      log('warn', 'condition:forceValue:final', { candidate: wanted });
+    } catch {
+      /* ignore */
+    }
+  }
+
   log('debug', 'condition:done', { success: ok, finalValue: root.value });
 }
