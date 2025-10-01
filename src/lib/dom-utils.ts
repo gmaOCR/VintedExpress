@@ -215,7 +215,7 @@ export async function clickInTheVoid(): Promise<void> {
       tmp.style.zIndex = '2147483647';
       document.body.appendChild(tmp);
       tmp.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0, clientY: 0 }));
-      document.body.click();
+      // document.body.click() SUPPRIMÉ - peut causer reset des champs
       requestAnimationFrame(() => {
         try {
           tmp.remove();

@@ -123,6 +123,13 @@ export async function uploadImages(urls: string[]): Promise<void> {
   const enableConcurrency = localStorage.getItem('vx:img:concurrency') === '1';
   const maxConc = Number(localStorage.getItem('vx:img:max')) || 4;
 
+  imgLog('info', 'download:start', {
+    total: urls.length,
+    concurrency: enableConcurrency,
+    maxWorkers: maxConc,
+    urls,
+  });
+
   if (enableConcurrency) {
     const queue = urls.slice();
     const workers: Promise<void>[] = [];
@@ -130,7 +137,9 @@ export async function uploadImages(urls: string[]): Promise<void> {
       workers.push(
         (async () => {
           while (queue.length) {
-            const url = queue.shift()!;
+            const url = queue.shift();
+            if (!url) break;
+            imgLog('info', 'worker:processing', { url, remaining: queue.length });
             await processOne(url);
           }
         })(),
@@ -138,10 +147,15 @@ export async function uploadImages(urls: string[]): Promise<void> {
     }
     await Promise.allSettled(workers);
   } else {
-    for (const url of urls) {
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      if (!url) continue;
+      imgLog('info', 'sequential:processing', { url, index: i, total: urls.length });
       await processOne(url);
     }
   }
+
+  imgLog('info', 'download:complete', { total: urls.length, prepared: files.length });
 
   async function processOne(url: string) {
     try {
@@ -439,6 +453,7 @@ export async function uploadImages(urls: string[]): Promise<void> {
           name: prepared.name,
           type: prepared.type,
           size: prepared.size,
+          url,
         });
       } else {
         imgLog('warn', 'image download/convert produced empty file, will try page prepareFile()', {
@@ -454,20 +469,35 @@ export async function uploadImages(urls: string[]): Promise<void> {
               name: alt.name,
               type: alt.type,
               size: alt.size,
+              url,
             });
+          } else {
+            imgLog('warn', 'prepareFile fallback returned empty or null file', { url });
           }
-        } catch {
-          /* ignore */
+        } catch (e) {
+          imgLog('warn', 'prepareFile fallback failed', {
+            url,
+            err: (e as Error)?.message,
+            stack: (e as Error)?.stack,
+          });
         }
       }
-    } catch {
-      /* ignore individual failures */
+    } catch (e) {
+      imgLog('warn', 'processOne FULL FAILURE for image', {
+        url,
+        err: (e as Error)?.message,
+        stack: (e as Error)?.stack,
+      });
     }
   }
 
   if (!files.length) {
-    imgLog('warn', 'no files prepared for upload');
-    return;
+    imgLog('warn', 'no files prepared for upload', { total: urls.length, prepared: 0 });
+    throw new Error(`Aucune image préparée (${urls.length} URLs reçues)`);
+  }
+
+  if (files.length < urls.length) {
+    imgLog('warn', 'some files failed to prepare', { total: urls.length, prepared: files.length });
   }
 
   // Appliquer la rotation
@@ -537,11 +567,15 @@ export async function uploadImages(urls: string[]): Promise<void> {
   });
 
   let successCount = 0;
-  for (const f of files) {
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (!f) continue;
     await jitter(60, 180);
     const beforeCount = grid ? grid.childElementCount : 0;
     const beforeLive = live ? (live.textContent ?? '') : '';
     imgLog('info', 'step:dnd:dispatch', {
+      index: i + 1,
+      total: files.length,
       name: f.name,
       type: f.type,
       size: f.size,
@@ -550,9 +584,13 @@ export async function uploadImages(urls: string[]): Promise<void> {
     });
     await dndOneFile(target, f);
     imgLog('debug', 'drop dispatched', { name: f.name, type: f.type, size: f.size });
-    const ok = await waitForMediaFeedback(grid, live, beforeCount, beforeLive, 6000);
+
+    // Attendre plus longtemps (10 secondes) pour être sûr
+    const ok = await waitForMediaFeedback(grid, live, beforeCount, beforeLive, 10000);
     if (!ok) {
       imgLog('warn', 'no feedback after drop (timeout)', {
+        index: i + 1,
+        total: files.length,
         name: f.name,
         beforeCount,
         afterCount: grid?.childElementCount,
@@ -561,8 +599,16 @@ export async function uploadImages(urls: string[]): Promise<void> {
       });
     } else {
       successCount++;
+      imgLog('info', 'image uploaded successfully', {
+        index: i + 1,
+        total: files.length,
+        name: f.name,
+        successCount,
+      });
     }
-    await jitter(90, 220);
+
+    // Attendre plus longtemps entre chaque image pour stabiliser
+    await jitter(300, 500);
   }
 
   // Fallback final via input

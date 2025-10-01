@@ -72,12 +72,15 @@ export {};
           await new Promise((r) => setTimeout(r, 200));
         }
 
+        // Page blocker supprimé - il empìhe de cliquer sur le bouton d'upload
+        log('info', 'workflow:no-page-blocker');
+
         // Remplir le formulaire
         log('info', 'workflow:fill-start');
         await fillNewItemForm(draft as unknown as RepublishDraft);
         log('info', 'workflow:fill-end');
 
-        // Fermer les dropdowns ouverts
+        // Fermer les dropdowns en utilisant blur() seulement (pas de click)
         await new Promise((r) => setTimeout(r, 500));
         const openDropdowns = document.querySelectorAll('[data-testid$="-dropdown-content"]');
         for (const dropdown of Array.from(openDropdowns)) {
@@ -85,91 +88,84 @@ export {};
             const input = dropdown.parentElement?.querySelector('input');
             if (input) {
               input.blur();
-              document.body.click();
+              // document.body.click() SUPPRIMÉ - peut causer reset des champs
             }
           }
         }
 
-        // PROTECTION ULTRA-AGRESSIVE: Bloquer les resets causés par les clics
-        await new Promise((r) => setTimeout(r, 1000));
+        // PROTECTION ULTRA-RENFORCÉE: Activation IMMÉDIATE (pas d'attente !)
         log('info', 'workflow:protect-start');
-        const capturedValues = captureAllFieldValues();
-        log('info', 'workflow:values-captured', { count: capturedValues.size });
 
-        // 1. BLOQUER LES CLICS sur les zones sensibles (état, taille, matière)
+        // Capturer les valeurs IMMÉDIATEMENT
+        const capturedValues = new Map<string, string>();
         const sensitiveSelectors = [
-          '[data-testid="item-status-id-dropdown"]',
-          '[data-testid="size-id-dropdown"]',
-          '[data-testid="material-id-dropdown"]',
           '[data-testid="item-status-id-dropdown-input"]',
           '[data-testid="size-id-dropdown-input"]',
           '[data-testid="material-id-dropdown-input"]',
         ];
 
-        const blockClick = (e: Event) => {
-          const target = e.target as HTMLElement;
-          for (const sel of sensitiveSelectors) {
-            const elem = document.querySelector(sel);
-            if (elem && (elem === target || elem.contains(target))) {
-              log('debug', 'workflow:click-blocked', { selector: sel });
-              e.stopPropagation();
-              e.stopImmediatePropagation();
-              e.preventDefault();
-              return false;
-            }
+        // Attendre 100ms seulement pour que React finisse de rendre
+        await new Promise((r) => setTimeout(r, 100));
+
+        for (const selector of sensitiveSelectors) {
+          const input = document.querySelector(selector) as HTMLInputElement | null;
+          if (input && input.value) {
+            capturedValues.set(selector, input.value);
+            log('debug', 'workflow:value-captured', { selector, value: input.value });
           }
-        };
+        }
 
-        // Capturer les clics en phase capture (avant React)
-        document.addEventListener('click', blockClick, { capture: true });
-        document.addEventListener('mousedown', blockClick, { capture: true });
-        document.addEventListener('mouseup', blockClick, { capture: true });
-        log('info', 'workflow:click-blocker-active');
+        log('info', 'workflow:values-captured', { count: capturedValues.size });
 
-        // 2. FORCER les valeurs en continu (polling agressif)
+        const sensitiveInputs = Array.from(
+          document.querySelectorAll(sensitiveSelectors.join(', ')),
+        ) as HTMLInputElement[];
+
+        // PROTECTION SIMPLIFIÉE: Pas de blocage d'événements (causait des problèmes)
+        // Seulement style visuel + polling pour forcer les valeurs
+        for (const input of sensitiveInputs) {
+          // Style visuel pour indiquer que le champ est protégé
+          input.style.backgroundColor = '#f0fdf4';
+          input.style.borderColor = '#22c55e';
+          input.style.opacity = '1';
+
+          // Empêcher l'édition directe mais permettre les clics
+          input.readOnly = true;
+          input.tabIndex = -1;
+        }
+
+        // COUCHE 2: Polling ULTRA-AGRESSIF pour forcer les valeurs
         const forceValues = () => {
-          let forced = 0;
           for (const [selector, expectedValue] of capturedValues.entries()) {
-            const input = document.querySelector(selector) as
-              | HTMLInputElement
-              | HTMLTextAreaElement
-              | null;
-            if (input && input.value !== expectedValue && expectedValue) {
-              input.value = expectedValue;
-              forced++;
+            const input = document.querySelector(selector) as HTMLInputElement | null;
+            if (input) {
+              if (input.value !== expectedValue) {
+                log('warn', 'workflow:value-reset-detected', {
+                  selector,
+                  expected: expectedValue,
+                  current: input.value,
+                });
+                input.value = expectedValue;
+                // Forcer React à voir la valeur
+                Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+                  input,
+                  expectedValue,
+                );
+              }
             }
-          }
-          if (forced > 0) {
-            log('debug', 'workflow:force-values', { count: forced });
           }
         };
 
-        // Forcer les valeurs toutes les 100ms pendant 30 secondes
-        const forceInterval = setInterval(forceValues, 100);
+        // Forcer toutes les 50ms pendant 60 secondes
+        const forceInterval = setInterval(forceValues, 50);
         setTimeout(() => {
           clearInterval(forceInterval);
           log('info', 'workflow:force-interval-stopped');
-        }, 30000);
+        }, 60000);
 
-        // 3. OBSERVER MutationObserver (backup au cas où)
+        // COUCHE 3: MutationObserver pour détecter les changements DOM
         const observer = new MutationObserver(() => {
-          let restored = 0;
-          for (const [selector, expectedValue] of capturedValues.entries()) {
-            const input = document.querySelector(selector) as
-              | HTMLInputElement
-              | HTMLTextAreaElement
-              | null;
-            if (input && input.value !== expectedValue && expectedValue) {
-              log('debug', 'workflow:restore-value', { selector, expected: expectedValue });
-              input.value = expectedValue;
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-              input.dispatchEvent(new Event('change', { bubbles: true }));
-              restored++;
-            }
-          }
-          if (restored > 0) {
-            log('info', 'workflow:values-restored', { count: restored });
-          }
+          forceValues();
         });
 
         const form = document.querySelector('form');
@@ -178,53 +174,61 @@ export {};
             childList: true,
             subtree: true,
             attributes: true,
-            attributeFilter: ['value'],
+            characterData: true,
           });
-          log('info', 'workflow:observer-active');
         }
 
-        // 4. VERROUILLER visuellement les champs sensibles
-        const lockFields = () => {
-          const fieldsToLock = [
-            'item-status-id-dropdown-input',
-            'size-id-dropdown-input',
-            'material-id-dropdown-input',
-          ];
+        log('info', 'workflow:fields-protected', { count: sensitiveInputs.length });
 
-          for (const testId of fieldsToLock) {
-            const input = document.querySelector(
-              `[data-testid="${testId}"]`,
-            ) as HTMLInputElement | null;
-            if (input && input.value) {
-              // Ajouter un indicateur visuel de verrouillage
-              input.style.backgroundColor = '#f0fdf4'; // vert très clair
-              input.style.borderColor = '#22c55e'; // vert
-              input.style.pointerEvents = 'none'; // Bloquer tous les événements pointer
-
-              // Ajouter un icône de cadenas
-              const parent = input.parentElement;
-              if (parent && !parent.querySelector('.vx-lock-icon')) {
-                const lockIcon = document.createElement('span');
-                lockIcon.className = 'vx-lock-icon';
-                lockIcon.textContent = '🔒';
-                lockIcon.style.cssText = `
-                  position: absolute;
-                  right: 8px;
-                  top: 50%;
-                  transform: translateY(-50%);
-                  font-size: 14px;
-                  pointer-events: none;
-                  z-index: 10;
-                `;
-                parent.style.position = 'relative';
-                parent.appendChild(lockIcon);
-              }
-            }
+        // Ajouter icône visuelle
+        for (const input of sensitiveInputs) {
+          const parent = input.parentElement;
+          if (parent && !parent.querySelector('.vx-lock-icon')) {
+            const lockIcon = document.createElement('span');
+            lockIcon.className = 'vx-lock-icon';
+            lockIcon.textContent = '🔒';
+            lockIcon.style.cssText = `
+              position: absolute;
+              right: 8px;
+              top: 50%;
+              transform: translateY(-50%);
+              font-size: 14px;
+              pointer-events: none;
+              z-index: 10000;
+            `;
+            parent.appendChild(lockIcon);
           }
-        };
+        }
 
-        lockFields();
-        log('info', 'workflow:fields-locked');
+        // Ajouter un message d'information simple
+        const infoBox = document.createElement('div');
+        infoBox.style.cssText = `
+          position: fixed;
+          top: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 9999999;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+          color: white;
+          padding: 12px 24px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+          pointer-events: none;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        infoBox.textContent = '✅ Formulaire rempli - Valeurs protégées automatiquement';
+        document.body.appendChild(infoBox);
+
+        // Masquer le message après 5 secondes
+        setTimeout(() => {
+          infoBox.style.opacity = '0';
+          infoBox.style.transition = 'opacity 0.5s';
+          setTimeout(() => infoBox.remove(), 500);
+        }, 5000);
+
+        log('info', 'workflow:protection-active');
 
         log('info', 'workflow:complete');
 
@@ -333,6 +337,7 @@ function injectUploadButton(imageUrls: string[]) {
 
       btn.textContent = '✅ Upload terminé !';
       btn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+      log('info', 'upload-button:success', { count: imageUrls.length });
 
       setTimeout(() => {
         btn.remove();
@@ -352,25 +357,6 @@ function injectUploadButton(imageUrls: string[]) {
 
   document.body.appendChild(btn);
   log('info', 'upload-button:injected', { count: imageUrls.length });
-}
-
-// Capture toutes les valeurs des champs du formulaire
-function captureAllFieldValues(): Map<string, string> {
-  const values = new Map<string, string>();
-  const inputs = document.querySelectorAll('input, textarea, select');
-  for (const input of Array.from(inputs)) {
-    if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
-      if (input.value && input.name) {
-        values.set(`[name="${input.name}"]`, input.value);
-      }
-      // Capturer aussi par data-testid pour les dropdowns
-      const testId = input.getAttribute('data-testid');
-      if (testId && input.value) {
-        values.set(`[data-testid="${testId}"]`, input.value);
-      }
-    }
-  }
-  return values;
 }
 
 // Fonction de log pour le debug (utilisée pour les logs d'images)

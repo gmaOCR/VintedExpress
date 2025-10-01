@@ -41,17 +41,47 @@ export async function waitForMediaFeedback(
   timeoutMs = 3000,
 ): Promise<boolean> {
   const start = Date.now();
+
   while (Date.now() - start < timeoutMs) {
-    if (grid && grid.childElementCount > beforeCount) {
-      return true;
+    if (grid) {
+      const currentCount = grid.childElementCount;
+
+      // Vérifier que le count a augmenté
+      if (currentCount > beforeCount) {
+        // NOUVEAU: Attendre que l'élément contienne réellement une image
+        const newElements = Array.from(grid.children).slice(beforeCount);
+        const hasRealImage = newElements.some((el) => {
+          // Vérifier qu'il y a une vraie image (img, ou background-image, ou preview)
+          const hasImg = el.querySelector('img');
+          const hasCanvas = el.querySelector('canvas');
+          const hasBgImage =
+            el instanceof HTMLElement &&
+            (el.style.backgroundImage || window.getComputedStyle(el).backgroundImage !== 'none');
+          return hasImg || hasCanvas || hasBgImage;
+        });
+
+        if (hasRealImage) {
+          // Attendre un peu plus pour stabiliser
+          await new Promise((r) => setTimeout(r, 200));
+          return true;
+        }
+      }
     }
+
     if (live) {
       const cur = live.textContent ?? '';
       if (cur && cur !== beforeLiveText) {
-        return true;
+        // Attendre encore un peu que l'image soit vraiment dans le DOM
+        await new Promise((r) => setTimeout(r, 300));
+
+        // Vérifier que le grid a bien augmenté
+        if (grid && grid.childElementCount > beforeCount) {
+          return true;
+        }
       }
     }
-    await new Promise((r) => setTimeout(r, 80));
+
+    await new Promise((r) => setTimeout(r, 100));
   }
   return false;
 }

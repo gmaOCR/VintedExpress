@@ -66,7 +66,7 @@ async function selectBrandEmptyById(): Promise<boolean> {
     (document.querySelector('#empty-brand') as HTMLElement | null);
   if (el) {
     click(el);
-    document.body.click();
+    // document.body.click() SUPPRIMÉ - peut causer reset
     return true;
   }
   return false;
@@ -95,7 +95,7 @@ async function selectBrandNoBrandQuick(): Promise<boolean> {
     });
     if (found) {
       click(found);
-      document.body.click();
+      // document.body.click() SUPPRIMÉ - peut causer reset
       return true;
     }
     await new Promise((r) => setTimeout(r, 40));
@@ -126,7 +126,7 @@ async function selectBrandNoBrand(): Promise<boolean> {
     const last = options[options.length - 1];
     if (last) {
       click(last);
-      document.body.click();
+      // document.body.click() SUPPRIMÉ - peut causer reset
       return true;
     }
   }
@@ -149,7 +149,7 @@ async function selectBrandNoBrand(): Promise<boolean> {
   const last = options[options.length - 1];
   if (last) {
     click(last);
-    document.body.click();
+    // document.body.click() SUPPRIMÉ - peut causer reset
     return true;
   }
   return false;
