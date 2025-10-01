@@ -6,12 +6,14 @@ import { forceCloseDropdown, openDropdown, waitForTitlesChange } from '../dropdo
 export async function fillColor(draft: RepublishDraft): Promise<void> {
   if (!draft.color || !draft.color.length) return;
   const sel = {
-    inputSelector: 'input[name="color"], #color, [data-testid="color-select-dropdown-input"]',
+    inputSelector:
+      'input[name="color"], #color, [data-testid="color-select-dropdown-input"], [data-testid="color-picker-input"], [data-testid*="color"][data-testid$="dropdown-input"], [data-testid*="color"][data-testid$="combobox-input"], [data-testid*="color"][data-testid$="-input"]',
     chevronSelector:
-      '[data-testid="color-select-dropdown-chevron-down"], [data-testid="color-select-dropdown-chevron-up"]',
-    contentSelector: '[data-testid="color-select-dropdown-content"]',
+      '[data-testid="color-select-dropdown-chevron-down"], [data-testid="color-select-dropdown-chevron-up"], [data-testid*="color"][data-testid$="dropdown-chevron-down"], [data-testid*="color"][data-testid$="dropdown-chevron-up"], [data-testid*="color"][data-testid$="combobox-chevron-down"], [data-testid*="color"][data-testid$="combobox-chevron-up"]',
+    contentSelector:
+      '[data-testid="color-select-dropdown-content"], [data-testid="color-picker-content"], [data-testid*="color"][data-testid$="dropdown-content"], [data-testid*="color"][data-testid$="combobox-content"], [data-testid*="color"][data-testid$="-content"]',
     searchSelector:
-      '[data-testid="color-select-dropdown-content"] input[type="search"], [data-testid="color-select-dropdown-content"] input',
+      '[data-testid="color-select-dropdown-content"] input[type="search"], [data-testid="color-picker-content"] input[type="search"], [data-testid*="color"][data-testid$="search-input"], [data-testid*="color"][data-testid$="search"] input',
   } as const;
   const root = await waitForElement<HTMLInputElement>(sel.inputSelector, { timeoutMs: 6000 });
   if (!root) return;
@@ -45,7 +47,9 @@ async function multiSelectColors(
       setInputValue(search, '');
       await delay(20);
       const titlesBefore = Array.from(
-        (root as HTMLElement | Document).querySelectorAll<HTMLElement>('.web_ui__Cell__title'),
+        (root as HTMLElement | Document).querySelectorAll<HTMLElement>(
+          '.web_ui__Cell__title, [data-testid$="--title"], [data-testid$="dropdown-row-label"], [data-testid$="option"], [role="option"], button',
+        ),
       );
       const sigBefore = titlesBefore.map((t) => normalize(t.textContent ?? '')).join('|');
       setInputValue(search, label);
@@ -62,11 +66,14 @@ async function multiSelectColors(
     if (!cell) {
       const items = Array.from(
         (root as HTMLElement | Document).querySelectorAll<HTMLElement>(
-          '.web_ui__Cell__cell[role="button"]',
+          '.web_ui__Cell__cell[role="button"], [role="option"], button, li',
         ),
       );
       cell = items.find((it) => {
-        const title = it.querySelector<HTMLElement>('.web_ui__Cell__title');
+        const title =
+          it.querySelector<HTMLElement>(
+            '.web_ui__Cell__title, [data-testid$="--title"], [data-testid$="dropdown-row-label"], [data-testid$="option"], span',
+          ) || it;
         return title && normalize(title.textContent ?? '') === wanted;
       });
     }

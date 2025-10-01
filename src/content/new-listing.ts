@@ -71,8 +71,15 @@ export {};
       }
       if (Array.isArray(draft.images) && draft.images.length) {
         imgLog('info', 'images:start', { count: draft.images.length, first: draft.images[0] });
-        await tryDropImages(draft.images.slice(0, 10));
-        imgLog('info', 'images:end');
+        try {
+          await tryDropImages(draft.images.slice(0, 10));
+          imgLog('info', 'images:end');
+        } catch (error) {
+          imgLog('warn', 'images:error', {
+            message: (error as Error)?.message ?? null,
+            name: (error as Error)?.name ?? null,
+          });
+        }
       } else {
         imgLog('warn', 'no images found in draft');
       }

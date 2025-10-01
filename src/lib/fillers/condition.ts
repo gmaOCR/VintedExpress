@@ -8,12 +8,13 @@ export async function fillCondition(draft: RepublishDraft): Promise<void> {
   if (!draft.condition) return;
   const sel = {
     inputSelector:
-      'input[name="condition"], #condition, [data-testid="condition-select-dropdown-input"]',
+      'input[name="condition"], #condition, [data-testid="condition-select-dropdown-input"], [data-testid="condition-v2-dropdown-input"], [data-testid*="condition"][data-testid$="dropdown-input"], [data-testid*="condition"][data-testid$="combobox-input"], [data-testid*="condition"][data-testid$="-input"]',
     chevronSelector:
-      '[data-testid="condition-select-dropdown-chevron-down"], [data-testid="condition-select-dropdown-chevron-up"]',
-    contentSelector: '[data-testid="condition-select-dropdown-content"]',
+      '[data-testid="condition-select-dropdown-chevron-down"], [data-testid="condition-select-dropdown-chevron-up"], [data-testid*="condition"][data-testid$="dropdown-chevron-down"], [data-testid*="condition"][data-testid$="dropdown-chevron-up"], [data-testid*="condition"][data-testid$="combobox-chevron-down"], [data-testid*="condition"][data-testid$="combobox-chevron-up"]',
+    contentSelector:
+      '[data-testid="condition-select-dropdown-content"], [data-testid="condition-v2-dropdown-content"], [data-testid*="condition"][data-testid$="dropdown-content"], [data-testid*="condition"][data-testid$="combobox-content"], [data-testid*="condition"][data-testid$="-content"]',
     searchSelector:
-      '[data-testid="condition-select-dropdown-content"] input[type="search"], [data-testid="condition-select-dropdown-content"] input',
+      '[data-testid="condition-select-dropdown-content"] input[type="search"], [data-testid="condition-v2-dropdown-content"] input[type="search"], [data-testid*="condition"][data-testid$="search-input"], [data-testid*="condition"][data-testid$="search"] input',
   } as const;
   const root = await waitForElement<HTMLInputElement>(sel.inputSelector, { timeoutMs: 6000 });
   if (!root) {

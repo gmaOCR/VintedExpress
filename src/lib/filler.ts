@@ -1,12 +1,6 @@
 import type { RepublishDraft } from '../types/draft';
-import {
-  selectCategoryPathDeterministic,
-  selectCategoryPathSimple,
-  waitAndClickCategory,
-  waitForCategoryCommit,
-  waitForUnisexCheckbox,
-} from './category';
-import { click, setInputValue, waitForElement } from './dom-utils';
+import { fillCategory } from './category-simple';
+import { click, setInputValue, typeInputLikeUser, waitForElement } from './dom-utils';
 import { closeAnyDropdowns } from './dropdown';
 import { fillBrand } from './fillers/brand';
 import { fillColor } from './fillers/color';
@@ -16,13 +10,61 @@ import { fillPatterns } from './fillers/patterns';
 import { fillSize } from './fillers/size';
 import { log, perf } from './metrics';
 
+function sanitizeCategoryPath(path: unknown[]): string[] {
+  const sanitized: string[] = [];
+  for (const entry of path) {
+    if (entry == null) continue;
+    if (typeof entry === 'string') {
+      const trimmed = entry.trim();
+      if (trimmed) sanitized.push(trimmed);
+      continue;
+    }
+    if (typeof entry === 'number') {
+      sanitized.push(String(entry));
+      continue;
+    }
+    if (typeof entry === 'object') {
+      const candidate =
+        typeof (entry as { label?: unknown }).label === 'string'
+          ? ((entry as { label?: unknown }).label as string)
+          : typeof (entry as { name?: unknown }).name === 'string'
+            ? ((entry as { name?: unknown }).name as string)
+            : typeof (entry as { title?: unknown }).title === 'string'
+              ? ((entry as { title?: unknown }).title as string)
+              : null;
+      if (candidate) {
+        const trimmed = candidate.trim();
+        if (trimmed) sanitized.push(trimmed);
+        continue;
+      }
+    }
+    try {
+      const fallback = String(entry).trim();
+      if (fallback && fallback !== '[object Object]') {
+        sanitized.push(fallback);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return sanitized;
+}
+
 // --- Entrée principale ---
 export async function fillNewItemForm(draft: RepublishDraft) {
-  if ((window as unknown as { __vx_fillRunning?: boolean }).__vx_fillRunning) {
+  type WindowWithFillState = Window & {
+    __vx_fillRunning?: boolean;
+    __vx_categoryRetryCount?: number;
+    __vx_categoryRetryPending?: boolean;
+  };
+
+  const win = window as unknown as WindowWithFillState;
+
+  if (win.__vx_fillRunning) {
     log('warn', 'fill:skip:already-running');
     return;
   }
-  (window as unknown as { __vx_fillRunning?: boolean }).__vx_fillRunning = true;
+  win.__vx_fillRunning = true;
   const runId = Date.now().toString(36).slice(-6);
   perf('total', 'start');
   log('info', 'fill:start', {
@@ -31,6 +73,8 @@ export async function fillNewItemForm(draft: RepublishDraft) {
     draftKeys: Object.keys(draft || {}).slice(0, 20),
     brand: (draft as Partial<RepublishDraft>).brand ?? null,
     material: (draft as Partial<RepublishDraft>).material ?? null,
+    categoryPathLength: draft.categoryPath?.length ?? 0,
+    priceValue: (draft as Partial<RepublishDraft>).priceValue ?? null,
     runId,
   });
   try {
@@ -38,7 +82,7 @@ export async function fillNewItemForm(draft: RepublishDraft) {
 
     // Indépendants
     const titleInput = await waitForElement<HTMLInputElement>(
-      'input[name="title"], input#title, [data-testid="title--input"]',
+      'input[name="title"], input#title, [data-testid="title--input"], [data-testid="title-input"], [data-testid="title-field-input"]',
     );
     if (titleInput && draft.title) {
       setInputValue(titleInput, draft.title);
@@ -46,85 +90,143 @@ export async function fillNewItemForm(draft: RepublishDraft) {
     }
 
     const descInput = await waitForElement<HTMLTextAreaElement>(
-      'textarea[name="description"], textarea#description, [data-testid="description--input"]',
+      'textarea[name="description"], textarea#description, [data-testid="description--input"], [data-testid="description-input"], [data-testid="description-field-input"]',
     );
     if (descInput && draft.description) {
       setInputValue(descInput, draft.description);
       log('debug', 'fill:description:set');
     }
 
-    const priceInput = await waitForElement<HTMLInputElement>(
-      'input[name="price"], input#price, [data-testid="price-input--input"]',
+    const priceInputRoot = await waitForElement<HTMLInputElement | HTMLElement>(
+      'input[name="price"], input#price, [data-testid="price-input--input"], [data-testid="price-input"], [data-testid="price-field-input"]',
     );
-    if (priceInput && typeof draft.priceValue === 'number') {
-      const text = draft.priceValue.toLocaleString('fr-FR', {
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      });
-      setInputValue(priceInput, text);
-      log('debug', 'fill:price:set', priceInput.value);
+    const priceInput =
+      priceInputRoot instanceof HTMLInputElement || priceInputRoot instanceof HTMLTextAreaElement
+        ? priceInputRoot
+        : (priceInputRoot?.querySelector('input, textarea') as
+            | HTMLInputElement
+            | HTMLTextAreaElement
+            | null);
+    if (priceInput) {
+      if (typeof draft.priceValue === 'number' && Number.isFinite(draft.priceValue)) {
+        const priceValue = draft.priceValue;
+        const primary = formatPriceForElement(priceInput, priceValue);
+        const attempted: string[] = [primary];
+        setInputValue(priceInput, primary);
+        log('debug', 'fill:price:set', {
+          mode: 'primary',
+          type: priceInput instanceof HTMLInputElement ? priceInput.type : null,
+          value: priceInput.value,
+          primary,
+        });
+
+        const fallbacks = collectPriceFallbacks(priceValue, primary);
+        fallbacks.forEach((candidate, index) => {
+          const delay = 70 * (index + 1);
+          attempted.push(candidate);
+          setTimeout(() => {
+            try {
+              if (isPriceValueInvalid(priceInput.value)) {
+                setInputValue(priceInput, candidate);
+                log('debug', 'fill:price:fallback:set', {
+                  candidate,
+                  delay,
+                  value: priceInput.value,
+                });
+              }
+            } catch {
+              /* ignore */
+            }
+          }, delay);
+        });
+
+        const typeDelay = 70 * (fallbacks.length + 2);
+        setTimeout(() => {
+          try {
+            if (isPriceValueInvalid(priceInput.value)) {
+              const typed = String(priceValue);
+              attempted.push(`[type:${typed}]`);
+              typeInputLikeUser(priceInput, typed);
+              log('debug', 'fill:price:fallback:type', {
+                typed,
+                value: priceInput.value,
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        }, typeDelay);
+
+        const cents = Math.round(priceValue * 100);
+        const hasDigitsFallback = Number.isFinite(cents);
+        const digitsDelay = typeDelay + 140;
+        if (hasDigitsFallback) {
+          const absDigits = String(Math.abs(cents));
+          const digitsInput = priceValue < 0 ? `-${absDigits}` : absDigits;
+          setTimeout(() => {
+            try {
+              if (isPriceValueInvalid(priceInput.value)) {
+                attempted.push(`[digits:${digitsInput}]`);
+                typeInputLikeUser(priceInput, digitsInput);
+                log('debug', 'fill:price:fallback:type-digits', {
+                  digits: digitsInput,
+                  value: priceInput.value,
+                });
+              }
+            } catch {
+              /* ignore */
+            }
+          }, digitsDelay);
+        }
+
+        const finalCheckDelay = (hasDigitsFallback ? digitsDelay : typeDelay) + 220;
+        setTimeout(() => {
+          try {
+            if (isPriceValueInvalid(priceInput.value)) {
+              log('warn', 'fill:price:still-invalid', {
+                value: priceInput.value,
+                priceValue,
+                attempted,
+                type: priceInput instanceof HTMLInputElement ? priceInput.type : null,
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        }, finalCheckDelay);
+      } else if (draft.priceValue != null) {
+        log('warn', 'fill:price:non-numeric', { priceValue: draft.priceValue });
+      } else {
+        log('debug', 'fill:price:skip:missing');
+      }
     }
 
     // (Unisex déclenché juste après la catégorie)
 
-    // Catégorie
+    // Catégorie - VERSION SIMPLIFIÉE
     let startedDependent = false;
     if (draft.categoryPath && draft.categoryPath.length) {
       perf('category', 'start');
-      const catInput = await waitForElement<HTMLInputElement>(
-        'input[name="category"], #category, [data-testid="catalog-select-dropdown-input"]',
-      );
-      if (catInput) {
-        log('debug', 'category:input:found');
-        const chevron = catInput.parentElement?.querySelector(
-          '[data-testid="catalog-select-dropdown-chevron-down"]',
-        ) as HTMLElement | null;
-        click(chevron || catInput);
-        const dropdownRootSelector = '[data-testid="catalog-select-dropdown-content"]';
-        await waitForElement<HTMLElement>(dropdownRootSelector, { timeoutMs: 2500 });
+      const path = sanitizeCategoryPath(draft.categoryPath ?? []);
 
-        const path = (draft.categoryPath ?? []).filter(Boolean);
-        const det = await selectCategoryPathDeterministic(dropdownRootSelector, path);
-        log('info', 'category:summary', { allOk: det.allOk, steps: det.steps, detRun: det.runId });
-        let stepResults = det.steps.map((s: { label: string; ok: boolean; isLast: boolean }) => ({
-          label: s.label,
-          ok: s.ok,
-          isLast: s.isLast,
-        }));
-        let allOk = det.allOk;
-        if (!allOk) {
-          const needLegacy =
-            stepResults.every((s: { ok: boolean }) => !s.ok) || stepResults.length < path.length;
-          if (needLegacy) {
-            const legacy = await selectCategoryPathSimple(dropdownRootSelector, path);
-            log('info', 'category:legacy', legacy);
-            if (legacy.allOk) {
-              stepResults = legacy.steps;
-              allOk = true;
-            }
-          }
+      if (path.length) {
+        const success = await fillCategory(path);
+
+        if (!success) {
+          log('warn', 'category:failed', { path });
         }
-        if (!allOk) {
-          const failed = stepResults.find(
-            (s: { label: string; ok: boolean; isLast: boolean }) => !s.ok,
-          );
-          if (failed) {
-            const ok = await waitAndClickCategory(dropdownRootSelector, failed.label);
-            log('debug', 'category:fallback:single', { label: failed.label, ok });
-          }
-        }
-        const expectedLeaf = path[path.length - 1] ?? '';
-        const committed = await waitForCategoryCommit(catInput, expectedLeaf);
-        log('debug', 'category:commit', { expectedLeaf, committed });
-        // Si échec global, retenter une fois rapide (ex: ordre initial partiellement incompatible)
-        // Unisex après commit (ou tentative)
+
+        // Unisex
         if (draft.unisex) {
-          perf('unisex', 'start');
-          const unisexInput = (await waitForUnisexCheckbox()) as HTMLInputElement | null;
-          if (unisexInput && !unisexInput.checked) click(unisexInput);
-          perf('unisex', 'end');
+          const unisexInput = await waitForElement<HTMLInputElement>(
+            'input[type="checkbox"][name*="unisex" i]',
+          );
+          if (unisexInput && !unisexInput.checked) {
+            click(unisexInput);
+          }
         }
-        // Séquentiel pour éviter collisions d'ouverture de dropdown / focus
+
+        // Remplir les champs dépendants
         const seq = async (label: keyof RepublishDraft, fn: () => Promise<void>) => {
           log('debug', `dep:${label}:start`);
           try {
@@ -134,6 +236,7 @@ export async function fillNewItemForm(draft: RepublishDraft) {
           }
           log('debug', `dep:${label}:end`);
         };
+
         await seq('brand', () => fillBrand(draft));
         await seq('size', () => fillSize(draft));
         await seq('condition', () => fillCondition(draft));
@@ -142,6 +245,7 @@ export async function fillNewItemForm(draft: RepublishDraft) {
         await seq('patterns', () => fillPatterns(draft));
         startedDependent = true;
       }
+
       perf('category', 'end');
     }
 
@@ -175,8 +279,86 @@ export async function fillNewItemForm(draft: RepublishDraft) {
       /* ignore */
     }
   } finally {
-    (window as unknown as { __vx_fillRunning?: boolean }).__vx_fillRunning = false;
+    win.__vx_fillRunning = false;
   }
 }
 
 // Section helpers historique supprimée (déplacée dans ./fillers et utilitaires)
+
+function formatPriceForLocale(value: number): string {
+  const lang = (document.documentElement.getAttribute('lang') || '').trim().toLowerCase();
+  const split = lang ? lang.split('-') : [];
+  const base = split.length > 0 ? split[0] : '';
+  const locale = base || lang || 'en';
+  const localesPreferComma = new Set(['fr', 'de', 'es', 'it', 'pt', 'pl', 'nl', 'lt', 'cs']);
+  const isInteger = Number.isInteger(value);
+
+  if (localesPreferComma.has(locale)) {
+    const formatter = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: isInteger ? 0 : 2,
+      maximumFractionDigits: isInteger ? 0 : 2,
+    });
+    return formatter.format(value);
+  }
+
+  const formatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: isInteger ? 0 : 2,
+    maximumFractionDigits: isInteger ? 0 : 2,
+  });
+  return formatter.format(value);
+}
+
+function formatPriceForElement(el: HTMLInputElement | HTMLTextAreaElement, value: number): string {
+  const input = el instanceof HTMLInputElement ? el : null;
+  const type = input?.type?.toLowerCase?.() ?? '';
+  const inputMode = input?.inputMode?.toLowerCase?.() ?? '';
+  const preferPlain =
+    type === 'number' ||
+    inputMode === 'decimal' ||
+    inputMode === 'numeric' ||
+    inputMode === 'tel' ||
+    el.getAttribute('inputmode')?.toLowerCase?.() === 'decimal';
+
+  if (preferPlain) {
+    if (Number.isInteger(value)) {
+      return String(Math.trunc(value));
+    }
+    return value.toFixed(2);
+  }
+
+  return formatPriceForLocale(value);
+}
+
+function collectPriceFallbacks(value: number, primary: string): string[] {
+  const candidates = new Set<string>();
+  candidates.add(String(value));
+  if (!Number.isInteger(value)) {
+    candidates.add(value.toFixed(2));
+  } else {
+    candidates.add(`${value}.00`);
+  }
+  candidates.add(formatPriceForLocale(value));
+  try {
+    const locales = ['fr-FR', 'en-US', 'de-DE'];
+    for (const locale of locales) {
+      const formatted = new Intl.NumberFormat(locale, {
+        minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+        maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+      }).format(value);
+      candidates.add(formatted);
+    }
+  } catch {
+    /* ignore */
+  }
+  candidates.delete(primary);
+  return Array.from(candidates).filter(Boolean);
+}
+
+function isPriceValueInvalid(value: string | null | undefined): boolean {
+  if (typeof value !== 'string') return true;
+  const normalized = value.replace(/\s+/g, '').toLowerCase();
+  if (!normalized.length) return true;
+  if (normalized.includes('nan')) return true;
+  if (normalized === 'undefined' || normalized === 'null') return true;
+  return false;
+}

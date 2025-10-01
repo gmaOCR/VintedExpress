@@ -16,6 +16,17 @@ export async function promptRotationAngle(): Promise<number | null> {
   return new Promise<number | null>((resolve) => {
     const existing = document.getElementById('vx-rotate-modal');
     if (existing) existing.remove();
+    const previousActive = document.activeElement as
+      | (HTMLInputElement | HTMLTextAreaElement | HTMLElement)
+      | null;
+    const previousValue =
+      previousActive instanceof HTMLInputElement || previousActive instanceof HTMLTextAreaElement
+        ? previousActive.value
+        : null;
+    const previousSelection =
+      previousActive instanceof HTMLInputElement || previousActive instanceof HTMLTextAreaElement
+        ? { start: previousActive.selectionStart, end: previousActive.selectionEnd }
+        : null;
     const overlay = document.createElement('div');
     overlay.id = 'vx-rotate-modal';
     overlay.style.position = 'fixed';
@@ -46,17 +57,84 @@ export async function promptRotationAngle(): Promise<number | null> {
         <button id="vx-rotate-apply" type="button" style="background:#2d7ef7;color:#fff;border:1px solid #1d64c4;border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600">Appliquer</button>
       </div>`;
 
+    const swallowEvents: Array<keyof HTMLElementEventMap> = [
+      'click',
+      'mousedown',
+      'mouseup',
+      'pointerdown',
+      'pointerup',
+      'touchstart',
+      'touchend',
+    ];
+
+    const restorePreviousFocus = () => {
+      if (!previousActive) return;
+      try {
+        previousActive.focus({ preventScroll: true } as FocusOptions);
+      } catch {
+        try {
+          previousActive.focus();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (
+        previousValue != null &&
+        (previousActive instanceof HTMLInputElement ||
+          previousActive instanceof HTMLTextAreaElement)
+      ) {
+        if (previousActive.value !== previousValue) {
+          previousActive.value = previousValue;
+          previousActive.dispatchEvent(new Event('input', { bubbles: true }));
+          previousActive.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (previousSelection) {
+          try {
+            const start =
+              typeof previousSelection.start === 'number'
+                ? previousSelection.start
+                : (previousValue?.length ?? undefined);
+            const end =
+              typeof previousSelection.end === 'number'
+                ? previousSelection.end
+                : (previousValue?.length ?? start);
+            if (typeof start === 'number' && typeof end === 'number') {
+              previousActive.setSelectionRange(start, end);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    };
+
     const cleanup = (val: number | null) => {
       window.removeEventListener('keydown', onKey);
+      swallowEvents.forEach((evt) => overlay.removeEventListener(evt, swallow, true));
       overlay.remove();
+      restorePreviousFocus();
       resolve(val);
     };
+
+    // Empêche qu'un clic sur l'overlay déclenche des handlers de la page (qui peuvent nettoyer des champs comme material)
+    function swallow(e: Event) {
+      if (e.target === overlay) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
 
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') cleanup(null); // Escape continue à annuler explicitement
       if (e.key === 'Enter') apply();
     }
     function apply() {
+      // Empêche la propagation qui pourrait déclencher des listeners extérieurs (reset material)
+      try {
+        // Si un event global est en cours, stopPropagation déjà géré par les listeners ci-dessous
+      } catch {
+        /* ignore */
+      }
       const input = box.querySelector<HTMLInputElement>('#vx-rotate-input');
       const raw = (input?.value || '').trim();
       if (!raw) return cleanup(null);
@@ -64,11 +142,22 @@ export async function promptRotationAngle(): Promise<number | null> {
       if (Number.isNaN(num)) return cleanup(null);
       cleanup(num);
     }
-    // Ne plus fermer sur clic extérieur: pas de handler sur overlay
+    swallowEvents.forEach((evt) => overlay.addEventListener(evt, swallow, true));
+    // Listener spécifique sur le bouton Appliquer : stopPropagation pour éviter side-effects sur la page
+    box.querySelector('#vx-rotate-apply')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      apply();
+    });
+    // Remplace l'ancienne attache simple (pour conserver la sémantique):
+    // box.querySelector('#vx-rotate-apply')?.addEventListener('click', apply);
     window.addEventListener('keydown', onKey);
-    box.querySelector('#vx-rotate-cancel')?.addEventListener('click', () => cleanup(null));
-    box.querySelector('#vx-rotate-apply')?.addEventListener('click', apply);
-
+    box.querySelector('#vx-rotate-cancel')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      cleanup(null);
+    });
+    // L'écouteur Apply est déjà ajouté plus haut avec stopPropagation
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     setTimeout(() => box.querySelector<HTMLInputElement>('#vx-rotate-input')?.focus(), 0);
@@ -102,6 +191,9 @@ export async function rotateImageFile(file: File, degrees: number): Promise<File
     canvas.height = outH;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('no ctx');
+    // Remplir fond en blanc pour éviter artefacts/coins noirs lors de la conversion JPEG
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, outW, outH);
     ctx.translate(outW / 2, outH / 2);
     ctx.rotate(rad);
     ctx.drawImage(img, -w / 2, -h / 2);

@@ -1,24 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
 import { parsePrice, splitColors } from '../src/lib/extractor';
+import { alienRingFixture } from './utils/alienRingFixture';
 
-defineSuite();
-
-function defineSuite() {
-  describe('extractor helpers', () => {
-    it('parsePrice handles euro with comma', () => {
-      expect(parsePrice('22,00 €')).toEqual({ value: 22, currency: 'EUR' });
-      expect(parsePrice('23,80 EUR')).toEqual({ value: 23.8, currency: 'EUR' });
-    });
-
-    it('parsePrice returns empty on invalid', () => {
-      expect(parsePrice('Not a price')).toEqual({});
-    });
-
-    it('splitColors splits by common separators', () => {
-      expect(splitColors('Gris, Argenté')).toEqual(['Gris', 'Argenté']);
-      expect(splitColors('Rouge / Noir')).toEqual(['Rouge', 'Noir']);
-      expect(splitColors('Bleu · Marine')).toEqual(['Bleu', 'Marine']);
+describe('extractor helpers', () => {
+  it('parsePrice extrait correctement le prix de la fixture', () => {
+    expect(parsePrice(alienRingFixture.priceText)).toEqual({
+      value: alienRingFixture.priceValue,
+      currency: alienRingFixture.currency,
     });
   });
-}
+
+  it('parsePrice retourne un objet vide sur texte invalide', () => {
+    expect(parsePrice('Not a price')).toEqual({});
+  });
+
+  it('splitColors découpe les couleurs de la fixture', () => {
+    expect(splitColors(alienRingFixture.color?.join(', ') ?? '')).toEqual(alienRingFixture.color);
+  });
+
+  it('splitColors supporte différents séparateurs', () => {
+    expect(splitColors('Gris, Argenté')).toEqual(['Gris', 'Argenté']);
+    expect(splitColors('Rouge / Noir')).toEqual(['Rouge', 'Noir']);
+    expect(splitColors('Bleu · Marine')).toEqual(['Bleu', 'Marine']);
+  });
+});

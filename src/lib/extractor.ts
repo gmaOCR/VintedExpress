@@ -3,12 +3,17 @@ import { RepublishDraft } from '../types/draft';
 export function parsePrice(text: string | null | undefined): { value?: number; currency?: string } {
   if (!text) return {};
   const raw = text.replace(/\s+/g, ' ').trim();
-  // Extraire monnaie et valeur, ex: "22,00 €" ou "23,80 €"
-  const match = raw.match(/([0-9]+(?:[.,][0-9]{1,2})?)\s*(€|eur|euro|euros|usd|£|gbp|chf)/i);
+  // Extraire monnaie et valeur, ex: "22,00 €", "€7.50" ou "23,80 EUR"
+  const match = raw.match(
+    /(?:\b|^)(?:\s*)(€|eur|euro|euros|usd|£|gbp|chf)?\s*([0-9]+(?:[.,][0-9]{1,2})?)\s*(€|eur|euro|euros|usd|£|gbp|chf)?/i,
+  );
   if (!match) return {};
-  const numStr = match[1]?.replace(',', '.') ?? '';
+  const [, leadingCurrency, numericPart, trailingCurrency] = match;
+  const numStr = numericPart?.replace(',', '.') ?? '';
   const value = Number.parseFloat(numStr);
-  const currency = match[2]?.toUpperCase() === '€' ? 'EUR' : match[2]?.toUpperCase();
+  const currencyRaw = trailingCurrency ?? leadingCurrency;
+  const upperCurrency = currencyRaw?.toUpperCase();
+  const currency = upperCurrency === '€' ? 'EUR' : upperCurrency;
   return { value: Number.isFinite(value) ? value : undefined, currency };
 }
 
@@ -21,19 +26,19 @@ export function splitColors(text: string | null | undefined): string[] | undefin
   return v.length ? v : undefined;
 }
 
-export function extractDraftFromItemPage(): RepublishDraft {
+export function extractDraftFromDocument(doc: Document): RepublishDraft {
+  const queryText = (selector: string) =>
+    (doc.querySelector(selector)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
   // Titre
-  const title = (
-    document.querySelector('[data-testid="item-title"], .box--item-details h1, h1')?.textContent ??
-    ''
-  ).trim();
+  const title = queryText('[data-testid="item-title"], .box--item-details h1, h1');
 
   // Description (dépliée si possible, sans inclure les blocs "Envoi", boutons, etc.)
   let description = '';
   const descContainer =
-    document.querySelector('[itemprop="description"]') ||
-    document.querySelector('[data-testid="item-description"]') ||
-    document.querySelector('.Item__description');
+    doc.querySelector('[itemprop="description"]') ||
+    doc.querySelector('[data-testid="item-description"]') ||
+    doc.querySelector('.Item__description');
   if (descContainer) {
     // Essayer d’étendre si un bouton "... plus" est présent
     const expandBtn = Array.from(descContainer.querySelectorAll('button')).find((b) =>
@@ -52,7 +57,7 @@ export function extractDraftFromItemPage(): RepublishDraft {
 
   // Prix
   const priceText = (
-    document.querySelector(
+    doc.querySelector(
       '[data-testid="item-price"], [data-testid="item-price"] p, .details-list--pricing',
     )?.textContent ?? ''
   ).trim();
@@ -60,7 +65,7 @@ export function extractDraftFromItemPage(): RepublishDraft {
 
   // Condition
   const condition = (
-    document.querySelector(
+    doc.querySelector(
       '[data-testid="item-attributes-status"] [itemprop="status"], [data-testid="item-attributes-status"] .details-list__item-value:last-child',
     )?.textContent ?? ''
   )
@@ -70,7 +75,7 @@ export function extractDraftFromItemPage(): RepublishDraft {
   // Taille
   const size =
     (
-      document.querySelector(
+      doc.querySelector(
         '[data-testid="item-attributes-size"] [itemprop="size"], [data-testid="item-attributes-size"] .details-list__item-value:last-child',
       )?.textContent ?? ''
     )
@@ -80,7 +85,7 @@ export function extractDraftFromItemPage(): RepublishDraft {
   // Matière
   const material =
     (
-      document.querySelector(
+      doc.querySelector(
         '[data-testid="item-attributes-material"] [itemprop="material"], [data-testid="item-attributes-material"] .details-list__item-value:last-child',
       )?.textContent ?? ''
     )
@@ -89,7 +94,7 @@ export function extractDraftFromItemPage(): RepublishDraft {
 
   // Couleur(s)
   const colorText = (
-    document.querySelector(
+    doc.querySelector(
       '[data-testid="item-attributes-color"] [itemprop="color"], [data-testid="item-attributes-color"] .details-list__item-value:last-child',
     )?.textContent ?? ''
   )
@@ -99,16 +104,14 @@ export function extractDraftFromItemPage(): RepublishDraft {
 
   // Images
   const images = Array.from(
-    document.querySelectorAll<HTMLImageElement>(
-      '[data-testid^="item-photo-"] img, .item-photos img',
-    ),
+    doc.querySelectorAll<HTMLImageElement>('[data-testid^="item-photo-"] img, .item-photos img'),
   )
     .map((img) => img.src)
     .filter(Boolean);
 
   // Breadcrumbs -> catégories
-  const categoryPath = Array.from(
-    document.querySelectorAll<HTMLLIElement>(
+  const rawCategoryPath = Array.from(
+    doc.querySelectorAll<HTMLLIElement>(
       '.breadcrumbs li [itemprop="title"], .breadcrumbs li span, .breadcrumbs__item span',
     ),
   )
@@ -117,12 +120,13 @@ export function extractDraftFromItemPage(): RepublishDraft {
       const v = (t || '').trim().toLowerCase();
       return v && v !== 'accueil' && v !== 'home';
     });
+  const categoryPath = compactCategoryPath(rawCategoryPath);
 
   // Unisexe: présent parfois près du titre ou dans un indicateur de genre
   // Heuristiques: chercher un badge/libellé "Unisexe"/"Unisex" dans l'en-tête
   let unisex: boolean | undefined = undefined;
   try {
-    const header = document.querySelector('h1')?.parentElement ?? document.body;
+    const header = doc.querySelector('h1')?.parentElement ?? doc.body ?? doc;
     const text = (header?.textContent ?? '').toLowerCase();
     if (/\bunisexe\b|\bunisex\b/.test(text)) {
       unisex = true;
@@ -134,7 +138,7 @@ export function extractDraftFromItemPage(): RepublishDraft {
   return {
     title,
     description,
-    images,
+    images: dedupeImages(images),
     priceValue,
     currency,
     condition: condition || undefined,
@@ -144,4 +148,49 @@ export function extractDraftFromItemPage(): RepublishDraft {
     categoryPath: categoryPath.length ? categoryPath : undefined,
     unisex,
   };
+}
+
+export function extractDraftFromItemPage(): RepublishDraft {
+  return extractDraftFromDocument(document);
+}
+
+function compactCategoryPath(path: string[]): string[] {
+  if (!path.length) return path;
+  const normalized = path.map((label) => label.trim()).filter((label) => label.length > 0);
+  if (normalized.length <= 1) return normalized;
+
+  const collapsed = normalized.filter((label, index) => {
+    if (index === 0) return true;
+    return label !== normalized[index - 1];
+  });
+
+  for (let blockSize = 1; blockSize <= collapsed.length / 2; blockSize += 1) {
+    if (collapsed.length % blockSize !== 0) continue;
+    const block = collapsed.slice(0, blockSize);
+    let matches = true;
+    for (let i = 0; i < collapsed.length; i += 1) {
+      if (collapsed[i] !== block[i % blockSize]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return block;
+    }
+  }
+
+  return collapsed;
+}
+
+function dedupeImages(urls: string[]): string[] {
+  if (urls.length <= 1) return urls;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const url of urls) {
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      out.push(url);
+    }
+  }
+  return out;
 }

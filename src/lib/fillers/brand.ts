@@ -11,6 +11,28 @@ import {
 import { NO_BRAND_SYNONYMS } from '../i18n';
 import { log } from '../metrics';
 
+const BRAND_INPUT_SELECTOR = [
+  'input[name="brand"]',
+  '#brand',
+  '[data-testid="brand-select-dropdown-input"]',
+  '[data-testid="brand-multi-list-dropdown-input"]',
+  '[data-testid="brand-select-input"]',
+  '[data-testid="brand-input"]',
+  '[data-testid*="brand"][data-testid$="dropdown-input"]',
+  '[data-testid*="brand"][data-testid$="combobox-input"]',
+  '[data-testid*="brand"][data-testid$="-input"]',
+  '[data-testid*="brand"] input',
+].join(', ');
+
+const BRAND_CHEVRON_SELECTOR =
+  '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"], [data-testid*="brand"][data-testid$="dropdown-chevron-down"], [data-testid*="brand"][data-testid$="dropdown-chevron-up"], [data-testid*="brand"][data-testid$="combobox-chevron-down"], [data-testid*="brand"][data-testid$="combobox-chevron-up"]';
+
+const BRAND_CONTENT_SELECTOR =
+  '[data-testid="brand-select-dropdown-content"], [data-testid="brand-multi-list-dropdown-content"], [data-testid*="brand"][data-testid$="dropdown-content"], [data-testid*="brand"][data-testid$="combobox-content"], [data-testid*="brand"][data-testid$="-content"]';
+
+const BRAND_SEARCH_SELECTOR =
+  '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"], [data-testid="brand-multi-list-dropdown-content"] input[type="search"], [data-testid*="brand"][data-testid$="search-input"], [data-testid*="brand"][data-testid$="search"] input[type="search"]';
+
 async function waitForInputValueEquals(
   input: HTMLInputElement,
   expected: string,
@@ -28,10 +50,9 @@ async function waitForInputValueEquals(
 
 async function selectBrandEmptyById(): Promise<boolean> {
   const sel = {
-    inputSelector: 'input[name="brand"], #brand, [data-testid="brand-select-dropdown-input"]',
-    chevronSelector:
-      '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-    contentSelector: '[data-testid="brand-select-dropdown-content"]',
+    inputSelector: BRAND_INPUT_SELECTOR,
+    chevronSelector: BRAND_CHEVRON_SELECTOR,
+    contentSelector: BRAND_CONTENT_SELECTOR,
   } as const;
   const input = await waitForElement<HTMLInputElement>(sel.inputSelector);
   if (!input) return false;
@@ -53,10 +74,9 @@ async function selectBrandEmptyById(): Promise<boolean> {
 
 async function selectBrandNoBrandQuick(): Promise<boolean> {
   const sel = {
-    inputSelector: 'input[name="brand"], #brand, [data-testid="brand-select-dropdown-input"]',
-    chevronSelector:
-      '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-    contentSelector: '[data-testid="brand-select-dropdown-content"]',
+    inputSelector: BRAND_INPUT_SELECTOR,
+    chevronSelector: BRAND_CHEVRON_SELECTOR,
+    contentSelector: BRAND_CONTENT_SELECTOR,
   } as const;
   const fast = await selectBrandEmptyById();
   if (fast) return true;
@@ -85,12 +105,10 @@ async function selectBrandNoBrandQuick(): Promise<boolean> {
 
 async function selectBrandNoBrand(): Promise<boolean> {
   const sel = {
-    inputSelector: 'input[name="brand"], #brand, [data-testid="brand-select-dropdown-input"]',
-    chevronSelector:
-      '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-    contentSelector: '[data-testid="brand-select-dropdown-content"]',
-    searchSelector:
-      '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
+    inputSelector: BRAND_INPUT_SELECTOR,
+    chevronSelector: BRAND_CHEVRON_SELECTOR,
+    contentSelector: BRAND_CONTENT_SELECTOR,
+    searchSelector: BRAND_SEARCH_SELECTOR,
   } as const;
   const input = await waitForElement<HTMLInputElement>(sel.inputSelector);
   if (!input) return false;
@@ -143,13 +161,7 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
   } catch {
     /* ignore */
   }
-  const rootSel = [
-    '[data-testid="brand-select-dropdown-input"]',
-    '#brand',
-    'input[name="brand"]',
-    '[data-testid*="brand"][data-testid$="dropdown-input"]',
-    '[data-testid*="brand"] input',
-  ].join(', ');
+  const rootSel = BRAND_INPUT_SELECTOR;
   const root = await waitForElement<HTMLInputElement>(rootSel, { timeoutMs: 6000 });
   if (!root) {
     log('debug', 'brand:input:not-found');
@@ -173,11 +185,9 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
     ok = await selectSingleByEnter(
       {
         inputSelector: rootSel,
-        chevronSelector:
-          '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-        contentSelector: '[data-testid="brand-select-dropdown-content"]',
-        searchSelector:
-          '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
+        chevronSelector: BRAND_CHEVRON_SELECTOR,
+        contentSelector: BRAND_CONTENT_SELECTOR,
+        searchSelector: BRAND_SEARCH_SELECTOR,
       },
       draft.brand,
     );
@@ -189,20 +199,17 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
         (await selectFromDropdownByText(
           {
             inputSelector: rootSel,
-            chevronSelector:
-              '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-            contentSelector: '[data-testid="brand-select-dropdown-content"]',
-            searchSelector:
-              '#brand-search-input, [data-testid="brand-select-dropdown-content"] input[type="search"]',
+            chevronSelector: BRAND_CHEVRON_SELECTOR,
+            contentSelector: BRAND_CONTENT_SELECTOR,
+            searchSelector: BRAND_SEARCH_SELECTOR,
           },
           wanted,
         )) ||
         (await selectFromDropdownByTitle(
           {
             inputSelector: rootSel,
-            chevronSelector:
-              '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-            contentSelector: '[data-testid="brand-select-dropdown-content"]',
+            chevronSelector: BRAND_CHEVRON_SELECTOR,
+            contentSelector: BRAND_CONTENT_SELECTOR,
           },
           wanted,
         ));
@@ -225,11 +232,7 @@ export async function fillBrand(draft: RepublishDraft): Promise<void> {
   }
   // Assurer la fermeture du menu si encore ouvert
   try {
-    await forceCloseDropdown(
-      root,
-      '[data-testid="brand-select-dropdown-chevron-down"], [data-testid="brand-select-dropdown-chevron-up"]',
-      '[data-testid="brand-select-dropdown-content"]',
-    );
+    await forceCloseDropdown(root, BRAND_CHEVRON_SELECTOR, BRAND_CONTENT_SELECTOR);
   } catch {
     /* ignore */
   }

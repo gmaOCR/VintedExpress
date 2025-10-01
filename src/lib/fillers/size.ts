@@ -6,12 +6,14 @@ import { log } from '../metrics';
 export async function fillSize(draft: RepublishDraft): Promise<void> {
   if (!draft.size) return;
   const sel = {
-    inputSelector: 'input[name="size"], #size, [data-testid="size-select-dropdown-input"]',
+    inputSelector:
+      'input[name="size"], #size, [data-testid="size-select-dropdown-input"], [data-testid="size-combobox-input"], [data-testid*="size"][data-testid$="dropdown-input"], [data-testid*="size"][data-testid$="combobox-input"], [data-testid*="size"][data-testid$="-input"]',
     chevronSelector:
-      '[data-testid="size-select-dropdown-chevron-down"], [data-testid="size-select-dropdown-chevron-up"]',
-    contentSelector: '[data-testid="size-select-dropdown-content"]',
+      '[data-testid="size-select-dropdown-chevron-down"], [data-testid="size-select-dropdown-chevron-up"], [data-testid*="size"][data-testid$="dropdown-chevron-down"], [data-testid*="size"][data-testid$="dropdown-chevron-up"], [data-testid*="size"][data-testid$="combobox-chevron-down"], [data-testid*="size"][data-testid$="combobox-chevron-up"]',
+    contentSelector:
+      '[data-testid="size-select-dropdown-content"], [data-testid="size-combobox-content"], [data-testid*="size"][data-testid$="dropdown-content"], [data-testid*="size"][data-testid$="combobox-content"], [data-testid*="size"][data-testid$="-content"]',
     searchSelector:
-      '[data-testid="size-select-dropdown-content"] input[type="search"], [data-testid="size-select-dropdown-content"] input',
+      '[data-testid="size-select-dropdown-content"] input[type="search"], [data-testid="size-combobox-content"] input[type="search"], [data-testid*="size"][data-testid$="search-input"], [data-testid*="size"][data-testid$="search"] input',
   } as const;
   const root = await waitForElement<HTMLInputElement>(sel.inputSelector, { timeoutMs: 6000 });
   if (!root) {

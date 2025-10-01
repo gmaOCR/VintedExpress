@@ -1,7 +1,152 @@
+let cachedInputEventCtor: typeof InputEvent | null = null;
+let hasCachedInputEventCtor = false;
+
+function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const proto = Object.getPrototypeOf(el);
+  const desc = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : undefined;
+  if (desc?.set) {
+    desc.set.call(el, value);
+  } else {
+    el.value = value;
+  }
+}
+
+function computeInputEventCtor(): typeof InputEvent {
+  let InputEventCtor: typeof InputEvent | undefined;
+  if (
+    typeof window !== 'undefined' &&
+    typeof (window as typeof window & { InputEvent?: typeof InputEvent }).InputEvent === 'function'
+  ) {
+    InputEventCtor = (window as typeof window & { InputEvent?: typeof InputEvent }).InputEvent;
+  } else if (
+    typeof globalThis !== 'undefined' &&
+    typeof (globalThis as typeof globalThis & { InputEvent?: typeof InputEvent }).InputEvent ===
+      'function'
+  ) {
+    InputEventCtor = (globalThis as typeof globalThis & { InputEvent?: typeof InputEvent })
+      .InputEvent;
+  }
+
+  let needsPolyfill = true;
+  if (InputEventCtor) {
+    try {
+      if (typeof document === 'undefined') {
+        needsPolyfill = false;
+      } else {
+        const probeEl = document.createElement('input');
+        let fired = false;
+        probeEl.addEventListener('input', () => {
+          fired = true;
+        });
+        const probeEvent = new InputEventCtor('input', {
+          bubbles: true,
+          data: '',
+          inputType: 'insertText',
+        });
+        probeEl.dispatchEvent(probeEvent);
+        needsPolyfill = !(fired && probeEvent instanceof InputEventCtor);
+      }
+    } catch {
+      needsPolyfill = true;
+    }
+  }
+
+  if (!InputEventCtor || needsPolyfill) {
+    class InputEventPolyfill extends Event {
+      data: string | null;
+      inputType: string;
+      constructor(type: string, params?: InputEventInit) {
+        super(type, params);
+        this.data = params?.data ?? null;
+        this.inputType = params?.inputType ?? 'insertText';
+      }
+    }
+    InputEventCtor = InputEventPolyfill as unknown as typeof InputEvent;
+    if (typeof globalThis !== 'undefined') {
+      (globalThis as typeof globalThis & { InputEvent?: typeof InputEvent }).InputEvent =
+        InputEventCtor;
+    }
+    if (typeof window !== 'undefined') {
+      (window as typeof window & { InputEvent?: typeof InputEvent }).InputEvent = InputEventCtor;
+    }
+  }
+
+  return InputEventCtor;
+}
+
+function getInputEventCtor(): typeof InputEvent {
+  if (!hasCachedInputEventCtor || !cachedInputEventCtor) {
+    cachedInputEventCtor = computeInputEventCtor();
+    hasCachedInputEventCtor = true;
+  }
+  return cachedInputEventCtor;
+}
+
+function dispatchInputEvent(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  data: string | null,
+  inputType: string,
+) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const InputEventCtor = getInputEventCtor();
+      const evt = new InputEventCtor('input', {
+        bubbles: true,
+        data: data ?? null,
+        inputType,
+      });
+      el.dispatchEvent(evt);
+      return;
+    } catch {
+      cachedInputEventCtor = null;
+      hasCachedInputEventCtor = false;
+    }
+  }
+  const fallback = new Event('input', { bubbles: true }) as Event & {
+    data?: string | null;
+    inputType?: string;
+  };
+  fallback.data = data ?? null;
+  fallback.inputType = inputType;
+  el.dispatchEvent(fallback);
+}
+
 export function setInputValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
-  el.value = value;
-  el.dispatchEvent(new Event('input', { bubbles: true }));
+  setNativeValue(el, value);
+  dispatchInputEvent(el, value, 'insertText');
   el.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+export function typeInputLikeUser(
+  el: HTMLInputElement | HTMLTextAreaElement,
+  text: string,
+  options?: { commit?: boolean },
+) {
+  const commit = options?.commit !== false;
+  try {
+    el.focus?.();
+  } catch {
+    /* ignore */
+  }
+
+  setNativeValue(el, '');
+  dispatchInputEvent(el, '', 'deleteContentBackward');
+
+  if (text) {
+    let manualValue = '';
+    const chars = Array.from(text);
+    for (const char of chars) {
+      manualValue += char;
+      setNativeValue(el, manualValue);
+      dispatchInputEvent(el, char, 'insertText');
+    }
+  } else {
+    dispatchInputEvent(el, '', 'insertText');
+  }
+
+  if (commit) {
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
 }
 
 export function click(el: Element | null | undefined) {
