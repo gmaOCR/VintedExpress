@@ -172,6 +172,66 @@ export function click(el: Element | null | undefined) {
   (el as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
+export async function robustClick(
+  el: Element | null | undefined,
+  options?: { verify?: () => boolean | Promise<boolean> },
+) {
+  if (!el) return false;
+  try {
+    // diagnostic
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    import('./metrics').then((m) =>
+      m.log('debug', 've:probe:dom-utils:robustClick', {
+        tag: (el as HTMLElement)?.tagName,
+        id: (el as HTMLElement)?.id,
+      }),
+    );
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    // pointer sequence
+    (el as HTMLElement).dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, composed: true }),
+    );
+    (el as HTMLElement).dispatchEvent(
+      new MouseEvent('mousedown', { bubbles: true, composed: true }),
+    );
+    try {
+      (el as HTMLElement).focus?.();
+    } catch {
+      /* ignore */
+    }
+    (el as HTMLElement).dispatchEvent(new MouseEvent('mouseup', { bubbles: true, composed: true }));
+    (el as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+
+    // small wait for UI to react
+    await new Promise((r) => setTimeout(r, 60));
+
+    // attempt Enter key on active element to trigger keyboard-driven selects
+    const active = document.activeElement as HTMLElement | null;
+    if (active) {
+      active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      active.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    }
+
+    // optional verify callback
+    if (options?.verify) {
+      try {
+        const ok = await options.verify();
+        if (ok) return true;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function blurInput(el: HTMLInputElement | HTMLTextAreaElement | null | undefined) {
   try {
     // diagnostic

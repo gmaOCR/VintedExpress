@@ -1,11 +1,151 @@
-// Auto-remplissage du formulaire /items/new à partir du brouillon stocké
+// Minimal content script for /items/new: load draft, fill form, expose e2e API,
+// inject a manual upload button and run a lightweight monitor to reapply
+// draft values if React clears them briefly.
+
 import { fillNewItemForm } from '../lib/filler';
 import { log } from '../lib/metrics';
 import type { RepublishDraft } from '../types/draft';
 export {};
 
-// Bootstrap minimal: récupérer le brouillon et déclencher le transfert d'images
-(async () => {
+// Lightweight helper: show a temporary info box
+function showInfo(msg: string) {
+  const box = document.createElement('div');
+  box.style.cssText = [
+    'position:fixed',
+    'top:16px',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'z-index:9999999',
+    'background:#10b981',
+    'color:#fff',
+    'padding:10px 16px',
+    'border-radius:8px',
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+    'pointer-events:none',
+  ].join(';');
+  box.textContent = msg;
+  document.body.appendChild(box);
+  setTimeout(() => {
+    box.style.transition = 'opacity 0.4s';
+    box.style.opacity = '0';
+    setTimeout(() => box.remove(), 450);
+  }, 1800);
+}
+
+// Minimal monitor: for a short period after fill, if an observed input is
+// cleared while we know the draft value, reapply it using the native setter.
+function startLightMonitor(
+  fields: Array<{ name: string; selector: string }>,
+  draft: Partial<RepublishDraft>,
+) {
+  const handles: Array<MutationObserver> = [];
+  const maxTries = 4;
+
+  for (const f of fields) {
+    const el = document.querySelector(f.selector) as HTMLInputElement | null;
+    if (!el) continue;
+
+    // Avoid `any` casts: treat draft as a loose record to access fields safely
+    const draftRecord = draft as Record<string, unknown> | undefined;
+    const target = (draftRecord?.[f.name] as string | undefined) ?? el.value ?? '';
+    if (!target) continue;
+
+    let tries = 0;
+    let last = el.value;
+
+    const applyNative = () => {
+      try {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (setter) setter.call(el, target);
+        else el.value = target;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch {
+        try {
+          el.value = target;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    const obs = new MutationObserver(() => {
+      if (el.value !== last) {
+        const wasReset = !!last && !el.value;
+        if (wasReset && tries < maxTries) {
+          tries += 1;
+          log('warn', 'monitor:restore', { field: f.name, attempt: tries });
+          applyNative();
+          // small later retry to survive quick rerenders
+          setTimeout(() => {
+            if (el.value !== target && tries < maxTries) applyNative();
+          }, 100);
+        }
+        last = el.value;
+      }
+    });
+
+    obs.observe(el, { attributes: true, attributeFilter: ['value'], subtree: true });
+    handles.push(obs);
+  }
+
+  // Stop monitoring after a short grace period
+  setTimeout(() => handles.forEach((h) => h.disconnect()), 6000);
+}
+
+// Inject manual upload button (kept minimal)
+function injectUploadButton(imageUrls: string[] | undefined) {
+  if (!imageUrls || imageUrls.length === 0) return;
+  if (document.getElementById('vx-upload-btn')) return;
+
+  const dropzone =
+    document.querySelector('[data-testid="dropzone"]') ||
+    document.querySelector('.media-select__input') ||
+    document.querySelector('[data-testid="photo-uploader"]');
+
+  if (!dropzone) return;
+
+  const btn = document.createElement('button');
+  btn.id = 'vx-upload-btn';
+  btn.type = 'button';
+  btn.textContent = `Uploader ${imageUrls.length} image${imageUrls.length > 1 ? 's' : ''}`;
+  btn.style.cssText = [
+    'position:fixed',
+    'right:16px',
+    'bottom:16px',
+    'z-index:10000',
+    'padding:10px 14px',
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+    'border-radius:8px',
+    'background:#667eea',
+    'color:#fff',
+    'border:none',
+    'cursor:pointer',
+  ].join(';');
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Upload en cours...';
+    try {
+      const mod = await import('../lib/image-uploader');
+      await mod.uploadImages(imageUrls.slice(0, 10));
+      btn.textContent = 'Upload terminé';
+      setTimeout(() => btn.remove(), 1200);
+      log('info', 'upload-button:success', { count: imageUrls.length });
+    } catch (err) {
+      log('warn', 'upload-button:error', { message: (err as Error)?.message ?? String(err) });
+      btn.disabled = false;
+      btn.textContent = `Réessayer (${imageUrls.length})`;
+    }
+  };
+
+  document.body.appendChild(btn);
+}
+
+// Main bootstrap: read draft from chrome.storage.local and run fill
+(async function main() {
   try {
     const chromeAny = (window as unknown as { chrome?: unknown }).chrome as
       | {
@@ -15,245 +155,51 @@ export {};
         }
       | undefined;
     if (!chromeAny?.storage?.local?.get) return;
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    chromeAny.storage?.local?.get?.('vx:republishDraft', async (items: Record<string, unknown>) => {
-      type Draft = Partial<RepublishDraft>;
-      const draft = ((items && (items['vx:republishDraft'] as Draft)) || {}) as Draft;
+
+    // small delay for the host page to render initial inputs
+    await new Promise((r) => setTimeout(r, 0));
+
+    chromeAny.storage.local.get('vx:republishDraft', async (items: Record<string, unknown>) => {
       try {
-        imgLog('info', 'draft loaded', {
-          hasImages: !!draft.images?.length,
-          imagesCount: draft.images?.length ?? 0,
-          url: location.href,
-        });
-        imgLog('info', 'env', {
-          userAgent: navigator.userAgent,
-          location: location.href,
-          debug: localStorage.getItem('vx:debug') === '1',
-          debugImages: localStorage.getItem('vx:debugImages') === '1',
-          e2e: localStorage.getItem('vx:e2e') === '1',
-        });
-      } catch {
-        /* ignore */
-      }
-      // Si aucune dropzone n'est présente sur la page, logguer l'information (utile en e2e)
-      try {
-        const hasDropHost = !!(
-          document.querySelector('[data-testid="dropzone"]') ||
-          document.querySelector('.media-select__input') ||
-          document.querySelector('[data-testid="photo-uploader"]')
-        );
-        if (!hasDropHost) imgLog('debug', 'dropHost not found (initial)');
-      } catch {
-        /* ignore */
-      }
-      // ========================================
-      // WORKFLOW ULTRA-SIMPLIFIÉ
-      // ========================================
-      // 1. Attendre chargement page
-      // 2. Remplir formulaire
-      // 3. FIN - L'utilisateur upload les images manuellement
-      // ========================================
+        const draft = (items && (items['vx:republishDraft'] as Partial<RepublishDraft>)) || {};
 
-      try {
-        // Attendre que React charge les champs essentiels
-        log('info', 'workflow:wait-page');
-        const maxWait = Date.now() + 10000;
-        while (Date.now() < maxWait) {
-          const ready =
-            !!document.querySelector('input[name="title"]') &&
-            !!document.querySelector('input[name="price"]') &&
-            !!document.querySelector('[data-testid="catalog-select-dropdown-input"]');
+        // Try to wait briefly for minimal form readiness; bail out if not present
+        const ready = () => !!document.querySelector('input[name="title"]');
+        const start = Date.now();
+        while (!ready() && Date.now() - start < 5000) await new Promise((r) => setTimeout(r, 200));
 
-          if (ready) {
-            await new Promise((r) => setTimeout(r, 500));
-            log('info', 'workflow:page-ready');
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 200));
-        }
+        await fillNewItemForm(draft as RepublishDraft);
+        showInfo('Formulaire rempli');
+        log('info', 'workflow:fill-complete');
 
-        // Page blocker supprimé - il empêche de cliquer sur le bouton d'upload
-        log('info', 'workflow:no-page-blocker');
-
-        // STRATÉGIE: Simuler un clic dans le vide AVANT le remplissage
-        // pour "déclencher" le comportement de reset de React une seule fois
-        log('info', 'workflow:preventive-click');
-        const { clickInTheVoid } = await import('../lib/dom-utils');
-        await clickInTheVoid();
-        await new Promise((r) => setTimeout(r, 500)); // Attendre stabilisation
-        log('info', 'workflow:preventive-click-done');
-
-        // Remplir le formulaire simplement
-        log('info', 'workflow:fill-start');
-        await fillNewItemForm(draft as unknown as RepublishDraft);
-        log('info', 'workflow:fill-end');
-
-        // Message de succès
-        const infoBox = document.createElement('div');
-        infoBox.style.cssText = `
-          position: fixed;
-          top: 20px;
-          left: 50%;
-          transform: translateX(-50%);
-          z-index: 9999999;
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          color: white;
-          padding: 12px 24px;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-          pointer-events: none;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        `;
-        infoBox.textContent = '✅ Formulaire rempli avec succès';
-        document.body.appendChild(infoBox);
-
-        setTimeout(() => {
-          infoBox.style.opacity = '0';
-          infoBox.style.transition = 'opacity 0.5s';
-          setTimeout(() => infoBox.remove(), 500);
-        }, 3000);
-
-        log('info', 'workflow:complete');
-
-        // MONITORING: Observer les changements de valeurs des champs sensibles
-        const monitoredFields = [
+        // Start a light monitor for important fields
+        const monitored = [
           {
             name: 'condition',
             selector:
-              'input[name="condition"], #condition, [data-testid*="condition"][data-testid$="dropdown-input"]',
+              'input[name="condition"], [data-testid*="condition"][data-testid$="dropdown-input"]',
           },
           {
             name: 'size',
-            selector:
-              'input[name="size"], #size, [data-testid*="size"][data-testid$="dropdown-input"], [data-testid*="size"][data-testid$="combobox-input"]',
+            selector: 'input[name="size"], [data-testid*="size"][data-testid$="dropdown-input"]',
           },
           {
             name: 'material',
             selector:
-              'input[name="material"], #material, [data-testid*="material"][data-testid$="dropdown-input"]',
+              'input[name="material"], [data-testid*="material"][data-testid$="dropdown-input"]',
           },
           {
             name: 'brand',
-            selector:
-              'input[name="brand"], #brand, [data-testid*="brand"][data-testid$="dropdown-input"]',
-          },
-          {
-            name: 'color',
-            selector:
-              'input[name="color"], #color, [data-testid*="color"][data-testid$="dropdown-input"]',
+            selector: 'input[name="brand"], [data-testid*="brand"][data-testid$="dropdown-input"]',
           },
         ];
+        startLightMonitor(monitored, draft as Partial<RepublishDraft>);
 
-        // Capturer les valeurs initiales
-        const initialValues = new Map<string, string>();
-        for (const field of monitoredFields) {
-          const input = document.querySelector(field.selector) as HTMLInputElement | null;
-          if (input) {
-            initialValues.set(field.name, input.value || '');
-            log('info', 'monitor:initial-value', {
-              field: field.name,
-              value: input.value || '(vide)',
-              hasValue: !!input.value,
-            });
-          }
-        }
-
-        // Observer les changements avec MutationObserver ET RESTAURATION AUTO
-        const observeInput = (input: HTMLInputElement, fieldName: string) => {
-          let lastValue = input.value;
-          const expectedValue = initialValues.get(fieldName) || '';
-
-          // Observer les attributs et propriétés
-          const observer = new MutationObserver(() => {
-            if (input.value !== lastValue) {
-              const wasReset = !!lastValue && !input.value;
-              log('warn', 'monitor:value-changed', {
-                field: fieldName,
-                oldValue: lastValue || '(vide)',
-                newValue: input.value || '(vide)',
-                wasReset,
-                timestamp: Date.now(),
-              });
-
-              // RESTAURATION AUTOMATIQUE si vidé par React
-              if (wasReset && expectedValue) {
-                log('warn', 'monitor:auto-restore', {
-                  field: fieldName,
-                  restoredValue: expectedValue,
-                });
-
-                // Utiliser le setter natif React
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                  HTMLInputElement.prototype,
-                  'value',
-                )?.set;
-                if (nativeInputValueSetter) {
-                  nativeInputValueSetter.call(input, expectedValue);
-                }
-                input.value = expectedValue;
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-                input.dispatchEvent(new Event('change', { bubbles: true }));
-
-                lastValue = expectedValue;
-              } else {
-                lastValue = input.value;
-              }
-            }
-          });
-
-          observer.observe(input, {
-            attributes: true,
-            attributeFilter: ['value'],
-            characterData: true,
-            subtree: true,
-          });
-
-          // Observer aussi les événements input/change
-          input.addEventListener('input', () => {
-            if (input.value !== lastValue) {
-              log('warn', 'monitor:input-event', {
-                field: fieldName,
-                oldValue: lastValue || '(vide)',
-                newValue: input.value || '(vide)',
-                wasReset: !!lastValue && !input.value,
-              });
-              lastValue = input.value;
-            }
-          });
-
-          input.addEventListener('change', () => {
-            if (input.value !== lastValue) {
-              log('warn', 'monitor:change-event', {
-                field: fieldName,
-                oldValue: lastValue || '(vide)',
-                newValue: input.value || '(vide)',
-                wasReset: !!lastValue && !input.value,
-              });
-              lastValue = input.value;
-            }
-          });
-        };
-
-        // Démarrer l'observation pour chaque champ
-        for (const field of monitoredFields) {
-          const input = document.querySelector(field.selector) as HTMLInputElement | null;
-          if (input) {
-            observeInput(input, field.name);
-          }
-        }
-
-        log('info', 'monitor:active', { fields: monitoredFields.length });
-
-        // Ajouter un bouton pour uploader les images manuellement
-        if (draft.images && draft.images.length > 0) {
-          injectUploadButton(draft.images);
-        }
-      } catch (error) {
-        log('warn', 'workflow:error', {
-          message: (error as Error)?.message ?? null,
-        });
+        // Inject upload button if images present
+        const draftRecord = draft as Record<string, unknown> | undefined;
+        injectUploadButton((draftRecord?.images as string[] | undefined) ?? undefined);
+      } catch (err) {
+        log('warn', 'workflow:fill-error', { message: (err as Error)?.message ?? String(err) });
       }
     });
   } catch {
@@ -261,7 +207,7 @@ export {};
   }
 })();
 
-// Expose API e2e
+// Expose e2e API
 declare global {
   interface Window {
     __vx_invokeFill?: (d: Partial<RepublishDraft>) => Promise<void>;
@@ -270,141 +216,17 @@ declare global {
 
 async function __vx_fillDraft(d: Partial<RepublishDraft>) {
   try {
-    await fillNewItemForm(d as unknown as RepublishDraft);
+    await fillNewItemForm(d as RepublishDraft);
+    showInfo('Formulaire rempli (e2e)');
   } catch {
     /* ignore */
   }
 }
 
 try {
-  window.__vx_invokeFill = __vx_fillDraft;
+  // attach if possible
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (window as any).__vx_invokeFill = __vx_fillDraft;
 } catch {
   /* ignore */
-}
-
-// ===================================================================
-// UPLOAD D'IMAGES DÉSACTIVÉ
-// ===================================================================
-// L'upload automatique des images causait des re-renders React
-// qui effaçaient les valeurs du formulaire. Solution: laisser
-// l'utilisateur uploader les images manuellement.
-// ===================================================================
-
-// Injecte un bouton pour uploader les images manuellement
-function injectUploadButton(imageUrls: string[]) {
-  // Vérifier si le bouton existe déjà
-  if (document.getElementById('vx-upload-btn')) return;
-
-  // Trouver la dropzone
-  const dropzone =
-    document.querySelector('[data-testid="dropzone"]') ||
-    document.querySelector('.media-select__input') ||
-    document.querySelector('[data-testid="photo-uploader"]');
-
-  if (!dropzone) {
-    log('warn', 'upload-button:no-dropzone');
-    return;
-  }
-
-  // Créer le bouton
-  const btn = document.createElement('button');
-  btn.id = 'vx-upload-btn';
-  btn.type = 'button';
-  btn.textContent = `📤 Uploader ${imageUrls.length} image${imageUrls.length > 1 ? 's' : ''}`;
-  btn.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 10000;
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transition: all 0.3s ease;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  `;
-
-  btn.onmouseover = () => {
-    btn.style.transform = 'translateY(-2px)';
-    btn.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.2)';
-  };
-
-  btn.onmouseout = () => {
-    btn.style.transform = 'translateY(0)';
-    btn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-  };
-
-  btn.onclick = async () => {
-    btn.disabled = true;
-    btn.textContent = '⏳ Upload en cours...';
-    btn.style.background = 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)';
-
-    try {
-      // Import dynamique du module d'upload
-      const { uploadImages } = await import('../lib/image-uploader');
-      await uploadImages(imageUrls.slice(0, 10));
-
-      btn.textContent = '✅ Upload terminé !';
-      btn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-      log('info', 'upload-button:success', { count: imageUrls.length });
-
-      setTimeout(() => {
-        btn.remove();
-      }, 3000);
-    } catch (error) {
-      log('warn', 'upload-button:error', { message: (error as Error)?.message });
-      btn.textContent = '❌ Erreur upload';
-      btn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
-      btn.disabled = false;
-
-      setTimeout(() => {
-        btn.textContent = `📤 Réessayer (${imageUrls.length} images)`;
-        btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-      }, 3000);
-    }
-  };
-
-  document.body.appendChild(btn);
-  log('info', 'upload-button:injected', { count: imageUrls.length });
-}
-
-// Fonction de log pour le debug (utilisée pour les logs d'images)
-function imgLog(level: 'info' | 'warn' | 'debug', ...args: unknown[]) {
-  /* eslint-disable no-console */
-  try {
-    const ls = (k: string) => {
-      try {
-        return localStorage.getItem(k) === '1';
-      } catch {
-        return false;
-      }
-    };
-    const isE2E =
-      ls('vx:e2e') || (typeof document !== 'undefined' && document.cookie.includes('vx:e2e=1'));
-    const isDebug = ls('vx:debug') || ls('vx:debugImages');
-    if (!(isE2E || isDebug)) return; // reste silencieux en production
-
-    const prefix = '[VX:img]';
-    const fn = level === 'warn' ? console.warn : level === 'debug' ? console.debug : console.log;
-    // Normalise les objets pour éviter [object Object] dans msg.text()
-    const norm = (v: unknown) =>
-      typeof v === 'string'
-        ? v
-        : (() => {
-            try {
-              return JSON.stringify(v);
-            } catch {
-              return String(v);
-            }
-          })();
-    fn(prefix, ...args.map(norm));
-  } catch {
-    /* ignore */
-  }
-  /* eslint-enable no-console */
 }

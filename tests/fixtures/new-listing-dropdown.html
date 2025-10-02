@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture - new listing dropdowns open</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      /* minimal styles to avoid layout issues in jsdom/playwright headless */
+      body {
+        font-family: Arial, Helvetica, sans-serif;
+      }
+      .input-dropdown[aria-hidden='false'] {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Minimal reproduction of the Vinted /items/new DOM with dropdowns open -->
+    <div class="regular-container">
+      <div class="web_ui__Card__card web_ui__Card__overflowVisible">
+        <div class="c-input c-input--wide c-input--transparent">
+          <label for="brand" class="c-input__title">Marque</label>
+          <div class="c-input__content">
+            <input
+              data-testid="brand-select-dropdown-input"
+              id="brand"
+              name="brand"
+              value="Sans marque"
+            />
+            <div
+              class="input-dropdown"
+              data-testid="brand-select-dropdown-content"
+              data-ve-dropdown-still-open="true"
+              style="
+                outline: rgba(255, 0, 0, 0.9) solid 2px;
+                background-color: rgba(255, 0, 0, 0.04);
+              "
+            >
+              <div class="web_ui__Card__card web_ui__Card__elevated web_ui__Card__overflowAuto">
+                <div class="input-dropdown__content input-dropdown__content--scrollable">
+                  <div
+                    id="selected-custom-brand"
+                    class="web_ui__Cell__cell web_ui__Cell__default web_ui__Cell__clickable"
+                    role="button"
+                    tabindex="0"
+                  >
+                    <div class="web_ui__Cell__content">
+                      <div class="web_ui__Cell__heading">
+                        <div class="web_ui__Cell__title">Sans marque</div>
+                      </div>
+                    </div>
+                    <div class="web_ui__Cell__suffix">
+                      <label class="web_ui__Radio__radio"
+                        ><input
+                          id="selected-custom-brand-radio"
+                          type="radio"
+                          checked
+                          name="selected-custom-brand-radio"
+                      /></label>
+                    </div>
+                  </div>
+                  <ul class="web_ui__List__list web_ui__List__tight">
+                    <li class="web_ui__Item__item web_ui__Item__with-divider">
+                      <div
+                        id="suggested-brand-319151"
+                        class="web_ui__Cell__cell web_ui__Cell__default web_ui__Cell__clickable"
+                        role="button"
+                      >
+                        <div class="web_ui__Cell__content">
+                          <div class="web_ui__Cell__heading">
+                            <div class="web_ui__Cell__title">Alien</div>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="c-input__icon" role="button">
+              <span data-testid="brand-select-dropdown-chevron-up"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="c-input c-input--wide c-input--transparent">
+          <label for="size" class="c-input__title">Taille</label>
+          <div class="c-input__content">
+            <input data-testid="size-select-dropdown-input" id="size" name="size" value="" />
+            <div class="c-input__icon" role="button">
+              <span data-testid="size-select-dropdown-chevron-down"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="c-input c-input--wide c-input--transparent">
+          <label for="condition" class="c-input__title">État</label>
+          <div class="c-input__content">
+            <input
+              data-testid="condition-select-dropdown-input"
+              id="condition"
+              name="condition"
+              value=""
+            />
+            <div class="c-input__icon" role="button">
+              <span data-testid="condition-select-dropdown-chevron-down"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="c-input c-input--wide c-input--transparent">
+          <label for="material" class="c-input__title">Matière</label>
+          <div class="c-input__content">
+            <input
+              data-testid="material-multi-list-dropdown-input"
+              id="material"
+              name="material"
+              value="Métal"
+            />
+            <div class="input-dropdown" data-testid="material-multi-list-dropdown-content">
+              <div class="web_ui__Card__card web_ui__Card__elevated web_ui__Card__overflowAuto">
+                <div class="input-dropdown__content input-dropdown__content--scrollable">
+                  <ul class="web_ui__List__list web_ui__List__tight">
+                    <li>
+                      <div
+                        id="material-457"
+                        class="web_ui__Cell__cell web_ui__Cell__default web_ui__Cell__clickable"
+                        role="button"
+                      >
+                        <div class="web_ui__Cell__content">
+                          <div class="web_ui__Cell__heading">
+                            <div class="web_ui__Cell__title">Métal</div>
+                          </div>
+                        </div>
+                        <div class="web_ui__Cell__suffix">
+                          <label class="web_ui__Checkbox__checkbox"
+                            ><input
+                              id="material-checkbox-457--input"
+                              type="checkbox"
+                              checked
+                              name="material-checkbox-457"
+                          /></label>
+                        </div>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="c-input__icon" role="button">
+              <span data-testid="material-multi-list-dropdown-chevron-up"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
