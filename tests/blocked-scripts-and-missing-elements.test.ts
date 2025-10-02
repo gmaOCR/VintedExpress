@@ -19,18 +19,13 @@ it(
     const spy = vi.spyOn(metrics, 'log');
 
     // Mock waitForElement to return quickly to simulate blocked/missing elements
-    const originalWait = domUtils.waitForElement as unknown as (
-      selector: string,
-      options?: { timeoutMs?: number; intervalMs?: number },
-    ) => Promise<Element | null>;
-    const waitSpy = vi
-      .spyOn(domUtils, 'waitForElement')
-      .mockImplementation((selector: string, options?: { timeoutMs?: number }) => {
-        // If element exists right now, return it; otherwise return null quickly
-        const el = document.querySelector(selector) as Element | null;
-        if (el) return Promise.resolve(el as Element);
-        return Promise.resolve(null);
-      });
+    // originalWait removed because unused in test
+    const waitSpy = vi.spyOn(domUtils, 'waitForElement').mockImplementation((selector: string) => {
+      // If element exists right now, return it; otherwise return null quickly
+      const el = document.querySelector(selector) as Element | null;
+      if (el) return Promise.resolve(el as Element);
+      return Promise.resolve(null);
+    });
 
     // Use the RepublishDraft shape expected by the filler
     const draft = {

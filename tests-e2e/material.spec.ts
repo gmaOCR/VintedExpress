@@ -1,23 +1,19 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+import { log } from '../src/lib/metrics';
+
 test.setTimeout(60000);
 
 test('material multi-list selects Cotton & Leather and closes dropdown', async ({ page }) => {
   // Servez une page « faux Vinted » avec une vraie origine locale: http://vinted.localhost/items/new
   const url = 'http://vinted.localhost/items/new';
-  // Log console côté page pour le debug
+  // Log console côté page pour le debug (gated)
   page.on('console', (msg) => {
-    // eslint-disable-next-line no-console
-    console.log(`[page:${msg.type()}]`, msg.text());
+    log('debug', `[page:${msg.type()}] ${msg.text()}`);
   });
   page.on('pageerror', (err) => {
-    // eslint-disable-next-line no-console
-    console.log('[pageerror]', err.message);
-  });
-  page.on('pageerror', (err) => {
-    // eslint-disable-next-line no-console
-    console.log('[pageerror]', err?.message || String(err));
+    log('debug', '[pageerror] ' + (err?.message || String(err)));
   });
 
   await page.addInitScript(() => {
@@ -162,20 +158,18 @@ test('material multi-list selects Cotton & Leather and closes dropdown', async (
     const w = window as unknown as { chrome?: { runtime?: { id?: string } } };
     return w.chrome?.runtime?.id ?? null;
   });
-  // eslint-disable-next-line no-console
-  console.log('debug: runtime.id before script =', rid1);
+  // debug: runtime.id before script
+  log('debug', 'debug: runtime.id before script =', rid1);
   await page.addScriptTag({ path: 'dist/src/content/new-listing.js', type: 'module' });
   const rid2 = await page.evaluate(() => {
     const w = window as unknown as { chrome?: { runtime?: { id?: string } } };
     return w.chrome?.runtime?.id ?? null;
   });
-  // eslint-disable-next-line no-console
-  console.log('debug: runtime.id after script =', rid2);
+  log('debug', 'debug: runtime.id after script =', rid2);
   const present = await page.evaluate(
     () => !!document.querySelector('[data-testid="material-checkbox-44--input"]'),
   );
-  // eslint-disable-next-line no-console
-  console.log('debug: checkbox-44 present at load =', present);
+  log('debug', 'debug: checkbox-44 present at load =', present);
   // Déclencher explicitement le remplissage via le hook e2e
   await page.evaluate(async () => {
     const w = window as unknown as {

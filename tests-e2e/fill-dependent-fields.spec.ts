@@ -1,12 +1,18 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+import { log } from '../src/lib/metrics';
+
 // Vérifie que le remplissage attend l'apparition tardive
 // des champs dépendants (brand, size, condition) après le choix de catégorie.
 test('remplit brand/size/condition après montage tardif', async ({ page }) => {
   const url = 'http://vinted.localhost/items/new';
-  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
-  page.on('pageerror', (err) => console.log('[pageerror]', err?.message || String(err)));
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) =>
+    log('debug', `[page:${msg.type()}]`, msg.text()),
+  );
+  page.on('pageerror', (err: Error) =>
+    log('debug', '[pageerror] ' + (err?.message || String(err))),
+  );
 
   await page.addInitScript(() => {
     try {

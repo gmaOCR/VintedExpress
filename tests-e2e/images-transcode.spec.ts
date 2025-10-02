@@ -1,6 +1,8 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+import { log } from '../src/lib/metrics';
+
 // Increase timeout because transcode stubs may take time on CI
 test.setTimeout(120000);
 
@@ -15,7 +17,9 @@ test('transcodage webp/avif -> jpeg: fichiers déposés avec .jpg et type image/
   const img1 = 'http://assets.localhost/img1.webp';
   const img2 = 'http://assets.localhost/img2.avif';
 
-  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) =>
+    log('debug', `[page:${msg.type()}]`, msg.text()),
+  );
 
   // 1) Stub chrome + storage draft (avec images) et désactiver le background (sendMessage => undefined)
   await page.addInitScript(

@@ -1,14 +1,16 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+import { log } from '../src/lib/metrics';
+
 test('remplit titre/description même sans dropzone (log dropHost not found)', async ({ page }) => {
   const url = 'http://vinted.localhost/items/new';
 
   const logs: string[] = [];
-  page.on('console', (msg) => {
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) => {
     const t = msg.text();
     logs.push(t);
-    console.log(`[page:${msg.type()}]`, t);
+    log('debug', '[page:' + String(msg.type()) + ']', t);
   });
 
   await page.addInitScript(() => {

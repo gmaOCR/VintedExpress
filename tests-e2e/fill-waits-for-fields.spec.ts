@@ -1,9 +1,13 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+import { log } from '../src/lib/metrics';
+
 test('attend le montage des champs et remplit ensuite', async ({ page }) => {
   const url = 'http://vinted.localhost/items/new';
-  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) =>
+    log('debug', '[page:' + String(msg.type()) + ']', msg.text()),
+  );
 
   await page.addInitScript(() => {
     try {

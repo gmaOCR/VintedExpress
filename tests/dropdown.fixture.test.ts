@@ -9,7 +9,9 @@ function loadFixture(name: string) {
   const html = readFileSync(`tests/fixtures/${name}`, 'utf8');
   const dom = new JSDOM(html, { runScripts: 'dangerously', resources: 'usable' });
   // attach jsdom window/document to globals for the test
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (global as any).window = dom.window;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (global as any).document = dom.window.document;
 }
 

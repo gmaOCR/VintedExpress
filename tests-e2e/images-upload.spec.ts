@@ -1,6 +1,8 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+import { log } from '../src/lib/metrics';
+
 // Some e2e operations (image fetching + synthetic drops) can be slow on CI.
 test.setTimeout(120000);
 
@@ -15,7 +17,9 @@ test('transfert des images: les fichiers sont déposés et détectés dans la gr
   const img1 = 'http://assets.localhost/img1.png';
   const img2 = 'http://assets.localhost/img2.png';
 
-  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) =>
+    log('debug', '[page:' + String(msg.type()) + ']', msg.text()),
+  );
 
   // 1) Stub chrome + storage draft (avec images) et désactiver le background (sendMessage => undefined)
   await page.addInitScript(

@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 /* eslint-disable simple-import-sort/imports */
 import { expect, test } from '@playwright/test';
+import { log } from '../src/lib/metrics';
 
 test.setTimeout(60000);
 import { readFileSync } from 'node:fs';
@@ -134,7 +135,9 @@ test('size fallback forceValue when UI does not populate input', async ({ page }
       await route.fulfill({ status: 204, body: '' });
     }
   });
-  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) =>
+    log('debug', '[page:' + String(msg.type()) + ']', msg.text()),
+  );
   await page.goto(url);
   // Injecter le script content inline (évite l'interception route 204)
   const scriptContent = readFileSync('dist/src/content/new-listing.js', 'utf8');
@@ -189,7 +192,9 @@ test('size mismatch uses draft value fallback', async ({ page }) => {
       await route.fulfill({ status: 204, body: '' });
     }
   });
-  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) =>
+    log('debug', '[page:' + String(msg.type()) + ']', msg.text()),
+  );
   await page.goto(url);
   const scriptContent = readFileSync('dist/src/content/new-listing.js', 'utf8');
   await page.addScriptTag({ content: scriptContent, type: 'module' });

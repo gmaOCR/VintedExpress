@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { expect, it } from 'vitest';
 
-import { setInputValue, waitForElement } from '../src/lib/dom-utils';
+import { waitForElement } from '../src/lib/dom-utils';
 import {
   forceCloseDropdown,
   multiSelectByTitles,

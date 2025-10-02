@@ -35,10 +35,10 @@ describe('fillNewItemForm waits for category before filling others', () => {
       description: 'desc',
       priceValue: 12.5,
       categoryPath: ['Clothes', 'Shirts'],
-    } as any;
+    } as Partial<import('../src/types/draft').RepublishDraft>;
 
     // Start fill but ensure category appears late
-    await fillNewItemForm(draft);
+    await fillNewItemForm(draft as unknown as import('../src/types/draft').RepublishDraft);
 
     // Verify category fill was called
     expect(spy).toHaveBeenCalled();

@@ -1,11 +1,15 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+import { log } from '../src/lib/metrics';
+
 test('breadcrumb complet est appliqué jusqu’au dernier niveau (catégorie)', async ({ page }) => {
   const url = 'http://vinted.localhost/items/new';
 
-  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
-  page.on('pageerror', (err) => console.log('[pageerror]', err?.message || String(err)));
+  page.on('console', (msg: import('@playwright/test').ConsoleMessage) =>
+    log('debug', '[page:' + String(msg.type()) + ']', msg.text()),
+  );
+  page.on('pageerror', (err: Error) => log('debug', '[pageerror]', err?.message || String(err)));
 
   // Simule l’API chrome + stockage du brouillon
   await page.addInitScript(() => {
