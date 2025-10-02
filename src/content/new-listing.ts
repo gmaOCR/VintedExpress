@@ -2,9 +2,12 @@
 // inject a manual upload button and run a lightweight monitor to reapply
 // draft values if React clears them briefly.
 
+import browser from 'webextension-polyfill';
+
 import { fillNewItemForm } from '../lib/filler';
 import { log } from '../lib/metrics';
 import type { RepublishDraft } from '../types/draft';
+import { KEY_REPUBLISH_SOURCE } from '../types/draft';
 export {};
 
 // Lightweight helper: show a temporary info box
@@ -162,6 +165,24 @@ function injectUploadButton(imageUrls: string[] | undefined) {
     chromeAny.storage.local.get('vx:republishDraft', async (items: Record<string, unknown>) => {
       try {
         const draft = (items && (items['vx:republishDraft'] as Partial<RepublishDraft>)) || {};
+        // Check explicit republish source marker; if absent, do not auto-fill to avoid triggering from generic new-item actions
+        let isRepublish = false;
+        try {
+          const stored = await browser.storage.local.get(KEY_REPUBLISH_SOURCE);
+          if (stored && stored[KEY_REPUBLISH_SOURCE]) isRepublish = true;
+        } catch {
+          /* ignore storage read errors */
+        }
+        if (!isRepublish) {
+          log('info', 'workflow:skip-fill-no-marker');
+          return;
+        }
+        // consume the marker so subsequent manual /items/new loads don't auto-fill
+        try {
+          await browser.storage.local.remove(KEY_REPUBLISH_SOURCE);
+        } catch {
+          /* ignore remove errors */
+        }
 
         // Try to wait briefly for minimal form readiness; bail out if not present
         const ready = () => !!document.querySelector('input[name="title"]');

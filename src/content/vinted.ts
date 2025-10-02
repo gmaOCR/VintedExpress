@@ -1,8 +1,10 @@
+import browser from 'webextension-polyfill';
+
 import { extractDraftFromItemPage } from '../lib/extractor';
 import { sendMessage } from '../lib/messaging';
 import { setTyped } from '../lib/storage';
 import type { RepublishDraft } from '../types/draft';
-import { KEY_REPUBLISH_DRAFT, RepublishDraftSchema } from '../types/draft';
+import { KEY_REPUBLISH_DRAFT, KEY_REPUBLISH_SOURCE, RepublishDraftSchema } from '../types/draft';
 import { ContentReady, RepublishCreate, RepublishInjected } from '../types/messages';
 
 function debug(...args: unknown[]) {
@@ -131,6 +133,14 @@ function findVisibleActionsBlock(): HTMLElement | null {
 function enhanceListingPage() {
   // Heuristique simple: URL d’une annonce Vinted contient souvent /items/xxx
   const isItem = /\/items\//.test(location.pathname);
+  // Ne rien faire sur les pages d'édition d'une annonce (URI se terminant par /edit)
+  const isEditPage = /\/edit(?:\/|$)/.test(location.pathname);
+  if (isEditPage) {
+    // retirer bouton si présent et quitter
+    const ex = document.getElementById('vx-republish');
+    if (ex) ex.remove();
+    return;
+  }
   if (!isItem) return;
 
   // Détecter si l’annonce est vendue (texte indicatif sur la page)
@@ -196,6 +206,8 @@ function enhanceListingPage() {
   baseStyle.color = baseStyle.color || '#2f855a';
   baseStyle.background = baseStyle.background || '#f0fff4';
 
+  // Mark the button with whether we detected the listing as sold at creation
+  btn.dataset.vxIsSold = String(isSold);
   btn.addEventListener('click', onRepublishClick);
   // Si on a la grille et le bouton supprimer, insérer juste après dans le même parent
   const gridContainer = (
@@ -288,9 +300,35 @@ function ensureFloatingButton(isSold: boolean) {
 }
 
 async function onRepublishClick() {
+  // Re-evaluate sold state at click time to avoid false positives
+  const statusNode = document.querySelector(
+    '[data-testid="item-status--content"], [data-testid="item-status"], ._sold, .is-sold',
+  );
+  const isSoldNow = /vendu|sold|verkauft|vendido|venduto|verkocht/i.test(
+    (statusNode?.textContent ?? '').toLowerCase(),
+  );
+  // If not sold, do not trigger the republish flow (user likely clicked a duplicate/create)
+  if (!isSoldNow) {
+    try {
+      debug('republish aborted: not sold');
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+
   const draft: RepublishDraft = extractDraftFromItemPage();
   // Ouvre le formulaire de création d’annonce; l’URL exacte peut varier selon la locale
   const targetUrl = new URL('/items/new', location.origin).toString();
+  // Mark the source explicitly so the /items/new script only auto-fills when this was a republish action
+  try {
+    // small marker; use a simple object so /items/new can detect the source and consume it
+    await browser.storage.local.set({
+      [KEY_REPUBLISH_SOURCE]: { source: 'republish-button', ts: Date.now() },
+    });
+  } catch {
+    /* ignore marker write failures */
+  }
   await sendMessage(RepublishCreate, { type: 'republish:create', payload: { targetUrl } });
   // Note: l’auto-remplissage sera géré par un content script sur la page /items/new
   try {

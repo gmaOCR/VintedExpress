@@ -75,3 +75,4 @@ export const RepublishDraftSchema = z.object({
 export type RepublishDraftParsed = z.infer<typeof RepublishDraftSchema>;
 
 export const KEY_REPUBLISH_DRAFT = 'vx:republishDraft';
+export const KEY_REPUBLISH_SOURCE = 'vx:republishSource';
