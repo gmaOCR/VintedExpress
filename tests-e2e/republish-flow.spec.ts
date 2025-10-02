@@ -84,6 +84,24 @@ test('republish flow: click republish -> open new -> auto-fill only when marker 
         <textarea name="description"></textarea>
         <input name="price" />
         <div data-testid="dropzone"></div>
+        <!-- Simulated category dropdown to exercise the real selection path in tests -->
+        <div data-testid="catalog-select-dropdown-content" role="listbox" style="display:block">
+          <div data-testid="catalog-select-dropdown-row" role="option">
+            <div class="web_ui__Cell__cell" role="button">
+              <div class="web_ui__Cell__title">Clothing</div>
+            </div>
+          </div>
+          <div data-testid="catalog-select-dropdown-row" role="option">
+            <div class="web_ui__Cell__cell" role="button">
+              <div class="web_ui__Cell__title">Jackets</div>
+            </div>
+          </div>
+          <div data-testid="catalog-select-dropdown-row" role="option">
+            <div class="web_ui__Cell__cell" role="button">
+              <div class="web_ui__Cell__title">Leather Jackets</div>
+            </div>
+          </div>
+        </div>
       </body>
     </html>`;
 
@@ -105,9 +123,10 @@ test('republish flow: click republish -> open new -> auto-fill only when marker 
   await page.click('[data-testid="vx-republish-button"]');
 
   // read storage - marker should be set
-  const storageAfterClick = await page.evaluate(
-    () => (window as unknown as any).__vx_test_storage || {},
-  );
+  const storageAfterClick = await page.evaluate(() => {
+    const g = window as unknown as { __vx_test_storage?: Record<string, unknown> };
+    return g.__vx_test_storage || {};
+  });
   // eslint-disable-next-line no-console
   console.log('E2E: storage after click ->', JSON.stringify(storageAfterClick));
 
@@ -125,9 +144,10 @@ test('republish flow: click republish -> open new -> auto-fill only when marker 
   });
 
   // Compute an updated snapshot (including any fallback we injected) and persist it for the next navigation
-  const updatedSnapshot = await page.evaluate(
-    () => (window as unknown as any).__vx_test_storage || {},
-  );
+  const updatedSnapshot = await page.evaluate(() => {
+    const g = window as unknown as { __vx_test_storage?: Record<string, unknown> };
+    return g.__vx_test_storage || {};
+  });
   await page.addInitScript((snapshot) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__vx_test_storage = snapshot || {};
