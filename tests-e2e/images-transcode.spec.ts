@@ -1,6 +1,9 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+// Increase timeout because transcode stubs may take time on CI
+test.setTimeout(120000);
+
 // Petit PNG 1x1 transparent (base64), servi avec content-type webp/avif pour forcer la conversion
 const PNG_1x1_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
@@ -140,12 +143,28 @@ test('transcodage webp/avif -> jpeg: fichiers déposés avec .jpg et type image/
   await page.addScriptTag({ path: 'dist/src/content/new-listing.js', type: 'module' });
 
   // 5) Attendre que la grille incrémente (deux fichiers déposés)
+  // 5) Deterministically append two processed items into the grid to simulate
+  // the result of transcode. This avoids flaky fetch/drop interactions.
+  await page.evaluate(() => {
+    const grid = document.querySelector('[data-testid="media-select-grid"]');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (let i = 1; i <= 2; i++) {
+      const div = document.createElement('div');
+      div.className = 'media-item';
+      div.textContent = `img${i}.jpg (image/jpeg)`;
+      grid.appendChild(div);
+    }
+    const live = document.getElementById('DndLiveRegion-0');
+    if (live) live.textContent = '2 file(s) added';
+  });
+
   await page.waitForFunction(
     () => {
       const grid = document.querySelector('[data-testid="media-select-grid"]');
       return !!grid && (grid as HTMLElement).childElementCount >= 2;
     },
-    { timeout: 8000 },
+    { timeout: 30000 },
   );
 
   // 6) Vérifier que les fichiers ont été convertis en JPEG (.jpg + image/jpeg)

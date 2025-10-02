@@ -113,6 +113,15 @@ function dispatchInputEvent(
 
 export function setInputValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
   setNativeValue(el, value);
+  try {
+    // diagnostic
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    import('./metrics').then((m) =>
+      m.log('debug', 've:probe:dom-utils:setInputValue', { name: el?.name, id: el?.id, value }),
+    );
+  } catch (e) {
+    /* ignore */
+  }
   dispatchInputEvent(el, value, 'insertText');
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }
@@ -151,10 +160,28 @@ export function typeInputLikeUser(
 
 export function click(el: Element | null | undefined) {
   if (!el) return;
+  try {
+    // diagnostic
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    import('./metrics').then((m) =>
+      m.log('debug', 've:probe:dom-utils:click', { tag: el?.tagName, id: (el as HTMLElement)?.id }),
+    );
+  } catch (e) {
+    /* ignore */
+  }
   (el as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
 }
 
 export function blurInput(el: HTMLInputElement | HTMLTextAreaElement | null | undefined) {
+  try {
+    // diagnostic
+    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+    import('./metrics').then((m) =>
+      m.log('debug', 've:probe:dom-utils:blur', { name: el?.name, id: el?.id }),
+    );
+  } catch (e) {
+    /* ignore */
+  }
   try {
     el?.blur();
   } catch {
@@ -202,31 +229,33 @@ export async function waitForGone(selector: string, timeoutMs = 800): Promise<bo
 }
 
 export async function clickInTheVoid(): Promise<void> {
+  // Avoid dispatching synthetic clicks: on some pages a programmatic click at
+  // (0,0) or a temporary element can trigger global click handlers that open
+  // or toggle dropdowns. Safer approach: blur the currently active element.
   return new Promise((resolve) => {
     try {
-      const tmp = document.createElement('div');
-      tmp.style.position = 'fixed';
-      tmp.style.left = '0';
-      tmp.style.top = '0';
-      tmp.style.width = '1px';
-      tmp.style.height = '1px';
-      tmp.style.opacity = '0';
-      tmp.style.pointerEvents = 'auto';
-      tmp.style.zIndex = '2147483647';
-      document.body.appendChild(tmp);
-      tmp.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0, clientY: 0 }));
-      // document.body.click() SUPPRIMÉ - peut causer reset des champs
-      requestAnimationFrame(() => {
-        try {
-          tmp.remove();
-        } catch {
-          /* ignore */
-        }
-        resolve();
-      });
+      const active = document.activeElement as HTMLElement | null;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-floating-promises
+        import('./metrics').then((m) =>
+          m.log('debug', 've:probe:dom-utils:clickInTheVoid:blurActive', {
+            activeTag: active?.tagName,
+            activeId: active?.id,
+          }),
+        );
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        active?.blur();
+      } catch {
+        /* ignore */
+      }
     } catch {
-      resolve();
+      /* ignore */
     }
+    // resolve on next frame to keep async semantics similar to previous impl
+    requestAnimationFrame(() => resolve());
   });
 }
 

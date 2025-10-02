@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fixture - items/new (synthetic)</title>
+    <style>
+      .input-dropdown {
+        position: relative;
+      }
+      .web_ui__Cell__cell {
+        cursor: pointer;
+        padding: 6px;
+      }
+      .web_ui__Cell__title {
+        font-size: 14px;
+      }
+      .chevron {
+        width: 16px;
+        height: 16px;
+        display: inline-block;
+      }
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <form id="new-item">
+      <div class="field brand-field">
+        <label for="brand-input">Marque</label>
+        <div class="input-dropdown brand-dropdown">
+          <div class="c-input">
+            <input id="brand-input" name="brand" data-testid="brand-select-dropdown-input" />
+            <button type="button" class="chevron" data-testid="brand-select-dropdown-chevron-down">
+              ▾
+            </button>
+          </div>
+          <div data-testid="brand-select-dropdown-content" class="input-dropdown-content">
+            <ul role="list" aria-label="brand-list">
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">MarqueA</div>
+                </div>
+              </li>
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">MarqueB</div>
+                </div>
+              </li>
+              <li id="empty-brand" class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">Aucune marque</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="field size-field">
+        <label for="size-input">Taille</label>
+        <div class="input-dropdown size-dropdown">
+          <div class="c-input">
+            <input id="size-input" name="size" data-testid="size-select-dropdown-input" />
+            <button type="button" class="chevron" data-testid="size-select-dropdown-chevron-down">
+              ▾
+            </button>
+          </div>
+          <div data-testid="size-select-dropdown-content" class="input-dropdown-content">
+            <ul role="list">
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content"><div class="web_ui__Cell__title">S</div></div>
+              </li>
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content"><div class="web_ui__Cell__title">M</div></div>
+              </li>
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">Ajustable</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="field condition-field">
+        <label for="condition-input">État</label>
+        <div class="input-dropdown condition-dropdown">
+          <div class="c-input">
+            <input
+              id="condition-input"
+              name="condition"
+              data-testid="condition-select-dropdown-input"
+            />
+            <button
+              type="button"
+              class="chevron"
+              data-testid="condition-select-dropdown-chevron-down"
+            >
+              ▾
+            </button>
+          </div>
+          <div data-testid="condition-select-dropdown-content" class="input-dropdown-content">
+            <ul role="list">
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">Neuf avec étiquette</div>
+                </div>
+              </li>
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">Très bon état</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="field color-field">
+        <label for="color-input">Couleur</label>
+        <div class="input-dropdown color-dropdown">
+          <div class="c-input">
+            <input id="color-input" name="color" data-testid="color-select-dropdown-input" />
+            <button type="button" class="chevron" data-testid="color-select-dropdown-chevron-down">
+              ▾
+            </button>
+          </div>
+          <div data-testid="color-select-dropdown-content" class="input-dropdown-content">
+            <ul role="list">
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">Argenté</div>
+                </div>
+                <div class="web_ui__Cell__suffix">
+                  <label class="web_ui__Checkbox__checkbox"><input type="checkbox" /></label>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="field material-field">
+        <label for="material-input">Matériau</label>
+        <div class="input-dropdown material-dropdown">
+          <div class="c-input">
+            <input
+              id="material-input"
+              name="material"
+              data-testid="material-multi-list-dropdown-input"
+            />
+            <button
+              type="button"
+              class="chevron"
+              data-testid="material-multi-list-dropdown-chevron-down"
+            >
+              ▾
+            </button>
+          </div>
+          <div data-testid="material-multi-list-dropdown-content" class="input-dropdown-content">
+            <ul role="list">
+              <li class="web_ui__Cell__cell" role="button">
+                <div class="web_ui__Cell__content">
+                  <div class="web_ui__Cell__title">Métal</div>
+                </div>
+                <div class="web_ui__Cell__suffix">
+                  <label class="web_ui__Checkbox__checkbox"><input type="checkbox" /></label>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <script>
+      // simulate the UI: clicking rows updates the nearest input value
+      document.querySelectorAll('.web_ui__Cell__cell').forEach((el) => {
+        el.addEventListener('click', () => {
+          const titleEl = el.querySelector('.web_ui__Cell__title');
+          // find nearest input in ancestor chain
+          let ancestor = el.closest('.input-dropdown');
+          let input = ancestor ? ancestor.querySelector('input') : null;
+          if (!input) input = document.querySelector('input');
+          if (input && titleEl) input.value = titleEl.textContent || '';
+        });
+      });
+
+      // chevron toggles content visibility
+      document.querySelectorAll('.chevron').forEach((btn) => {
+        btn.addEventListener('click', (ev) => {
+          const wrapper = btn.closest('.input-dropdown') || document.body;
+          const content = wrapper.querySelector('[data-testid$="-content"]');
+          if (content) content.classList.toggle('hidden');
+        });
+      });
+    </script>
+  </body>
+</html>

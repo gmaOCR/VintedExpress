@@ -1,6 +1,8 @@
 /* eslint-disable no-console */
 /* eslint-disable simple-import-sort/imports */
 import { expect, test } from '@playwright/test';
+
+test.setTimeout(60000);
 import { readFileSync } from 'node:fs';
 
 // Helpers commune: stub chrome + draft injection
@@ -132,6 +134,7 @@ test('size fallback forceValue when UI does not populate input', async ({ page }
       await route.fulfill({ status: 204, body: '' });
     }
   });
+  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
   await page.goto(url);
   // Injecter le script content inline (évite l'interception route 204)
   const scriptContent = readFileSync('dist/src/content/new-listing.js', 'utf8');
@@ -165,7 +168,9 @@ test('size fallback forceValue when UI does not populate input', async ({ page }
       ) as HTMLInputElement | null;
       return !!el && el.value.trim().length > 0;
     },
-    { timeout: 3000 },
+    // Allow a bit more time for the UI to update and for fallback to run
+    // Increased timeout to reduce flakiness on slow CI hosts
+    { timeout: 20000 },
   );
   const finalVal = await page.locator('[data-testid="size-select-dropdown-input"]').inputValue();
   expect(finalVal).toBe('M');
@@ -184,6 +189,7 @@ test('size mismatch uses draft value fallback', async ({ page }) => {
       await route.fulfill({ status: 204, body: '' });
     }
   });
+  page.on('console', (msg) => console.log(`[page:${msg.type()}]`, msg.text()));
   await page.goto(url);
   const scriptContent = readFileSync('dist/src/content/new-listing.js', 'utf8');
   await page.addScriptTag({ content: scriptContent, type: 'module' });
@@ -211,7 +217,7 @@ test('size mismatch uses draft value fallback', async ({ page }) => {
       ) as HTMLInputElement | null;
       return !!el && el.value.trim().length > 0;
     },
-    { timeout: 3000 },
+    { timeout: 20000 },
   );
   const finalVal = await page.locator('[data-testid="size-select-dropdown-input"]').inputValue();
   expect(finalVal).toBe('M');

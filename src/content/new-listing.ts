@@ -72,135 +72,23 @@ export {};
           await new Promise((r) => setTimeout(r, 200));
         }
 
-        // Page blocker supprimé - il empìhe de cliquer sur le bouton d'upload
+        // Page blocker supprimé - il empêche de cliquer sur le bouton d'upload
         log('info', 'workflow:no-page-blocker');
 
-        // Remplir le formulaire
+        // STRATÉGIE: Simuler un clic dans le vide AVANT le remplissage
+        // pour "déclencher" le comportement de reset de React une seule fois
+        log('info', 'workflow:preventive-click');
+        const { clickInTheVoid } = await import('../lib/dom-utils');
+        await clickInTheVoid();
+        await new Promise((r) => setTimeout(r, 500)); // Attendre stabilisation
+        log('info', 'workflow:preventive-click-done');
+
+        // Remplir le formulaire simplement
         log('info', 'workflow:fill-start');
         await fillNewItemForm(draft as unknown as RepublishDraft);
         log('info', 'workflow:fill-end');
 
-        // Fermer les dropdowns en utilisant blur() seulement (pas de click)
-        await new Promise((r) => setTimeout(r, 500));
-        const openDropdowns = document.querySelectorAll('[data-testid$="-dropdown-content"]');
-        for (const dropdown of Array.from(openDropdowns)) {
-          if (dropdown instanceof HTMLElement && dropdown.offsetParent !== null) {
-            const input = dropdown.parentElement?.querySelector('input');
-            if (input) {
-              input.blur();
-              // document.body.click() SUPPRIMÉ - peut causer reset des champs
-            }
-          }
-        }
-
-        // PROTECTION ULTRA-RENFORCÉE: Activation IMMÉDIATE (pas d'attente !)
-        log('info', 'workflow:protect-start');
-
-        // Capturer les valeurs IMMÉDIATEMENT
-        const capturedValues = new Map<string, string>();
-        const sensitiveSelectors = [
-          '[data-testid="item-status-id-dropdown-input"]',
-          '[data-testid="size-id-dropdown-input"]',
-          '[data-testid="material-id-dropdown-input"]',
-        ];
-
-        // Attendre 100ms seulement pour que React finisse de rendre
-        await new Promise((r) => setTimeout(r, 100));
-
-        for (const selector of sensitiveSelectors) {
-          const input = document.querySelector(selector) as HTMLInputElement | null;
-          if (input && input.value) {
-            capturedValues.set(selector, input.value);
-            log('debug', 'workflow:value-captured', { selector, value: input.value });
-          }
-        }
-
-        log('info', 'workflow:values-captured', { count: capturedValues.size });
-
-        const sensitiveInputs = Array.from(
-          document.querySelectorAll(sensitiveSelectors.join(', ')),
-        ) as HTMLInputElement[];
-
-        // PROTECTION SIMPLIFIÉE: Pas de blocage d'événements (causait des problèmes)
-        // Seulement style visuel + polling pour forcer les valeurs
-        for (const input of sensitiveInputs) {
-          // Style visuel pour indiquer que le champ est protégé
-          input.style.backgroundColor = '#f0fdf4';
-          input.style.borderColor = '#22c55e';
-          input.style.opacity = '1';
-
-          // Empêcher l'édition directe mais permettre les clics
-          input.readOnly = true;
-          input.tabIndex = -1;
-        }
-
-        // COUCHE 2: Polling ULTRA-AGRESSIF pour forcer les valeurs
-        const forceValues = () => {
-          for (const [selector, expectedValue] of capturedValues.entries()) {
-            const input = document.querySelector(selector) as HTMLInputElement | null;
-            if (input) {
-              if (input.value !== expectedValue) {
-                log('warn', 'workflow:value-reset-detected', {
-                  selector,
-                  expected: expectedValue,
-                  current: input.value,
-                });
-                input.value = expectedValue;
-                // Forcer React à voir la valeur
-                Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
-                  input,
-                  expectedValue,
-                );
-              }
-            }
-          }
-        };
-
-        // Forcer toutes les 50ms pendant 60 secondes
-        const forceInterval = setInterval(forceValues, 50);
-        setTimeout(() => {
-          clearInterval(forceInterval);
-          log('info', 'workflow:force-interval-stopped');
-        }, 60000);
-
-        // COUCHE 3: MutationObserver pour détecter les changements DOM
-        const observer = new MutationObserver(() => {
-          forceValues();
-        });
-
-        const form = document.querySelector('form');
-        if (form) {
-          observer.observe(form, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            characterData: true,
-          });
-        }
-
-        log('info', 'workflow:fields-protected', { count: sensitiveInputs.length });
-
-        // Ajouter icône visuelle
-        for (const input of sensitiveInputs) {
-          const parent = input.parentElement;
-          if (parent && !parent.querySelector('.vx-lock-icon')) {
-            const lockIcon = document.createElement('span');
-            lockIcon.className = 'vx-lock-icon';
-            lockIcon.textContent = '🔒';
-            lockIcon.style.cssText = `
-              position: absolute;
-              right: 8px;
-              top: 50%;
-              transform: translateY(-50%);
-              font-size: 14px;
-              pointer-events: none;
-              z-index: 10000;
-            `;
-            parent.appendChild(lockIcon);
-          }
-        }
-
-        // Ajouter un message d'information simple
+        // Message de succès
         const infoBox = document.createElement('div');
         infoBox.style.cssText = `
           position: fixed;
@@ -218,19 +106,145 @@ export {};
           pointer-events: none;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         `;
-        infoBox.textContent = '✅ Formulaire rempli - Valeurs protégées automatiquement';
+        infoBox.textContent = '✅ Formulaire rempli avec succès';
         document.body.appendChild(infoBox);
 
-        // Masquer le message après 5 secondes
         setTimeout(() => {
           infoBox.style.opacity = '0';
           infoBox.style.transition = 'opacity 0.5s';
           setTimeout(() => infoBox.remove(), 500);
-        }, 5000);
-
-        log('info', 'workflow:protection-active');
+        }, 3000);
 
         log('info', 'workflow:complete');
+
+        // MONITORING: Observer les changements de valeurs des champs sensibles
+        const monitoredFields = [
+          {
+            name: 'condition',
+            selector:
+              'input[name="condition"], #condition, [data-testid*="condition"][data-testid$="dropdown-input"]',
+          },
+          {
+            name: 'size',
+            selector:
+              'input[name="size"], #size, [data-testid*="size"][data-testid$="dropdown-input"], [data-testid*="size"][data-testid$="combobox-input"]',
+          },
+          {
+            name: 'material',
+            selector:
+              'input[name="material"], #material, [data-testid*="material"][data-testid$="dropdown-input"]',
+          },
+          {
+            name: 'brand',
+            selector:
+              'input[name="brand"], #brand, [data-testid*="brand"][data-testid$="dropdown-input"]',
+          },
+          {
+            name: 'color',
+            selector:
+              'input[name="color"], #color, [data-testid*="color"][data-testid$="dropdown-input"]',
+          },
+        ];
+
+        // Capturer les valeurs initiales
+        const initialValues = new Map<string, string>();
+        for (const field of monitoredFields) {
+          const input = document.querySelector(field.selector) as HTMLInputElement | null;
+          if (input) {
+            initialValues.set(field.name, input.value || '');
+            log('info', 'monitor:initial-value', {
+              field: field.name,
+              value: input.value || '(vide)',
+              hasValue: !!input.value,
+            });
+          }
+        }
+
+        // Observer les changements avec MutationObserver ET RESTAURATION AUTO
+        const observeInput = (input: HTMLInputElement, fieldName: string) => {
+          let lastValue = input.value;
+          const expectedValue = initialValues.get(fieldName) || '';
+
+          // Observer les attributs et propriétés
+          const observer = new MutationObserver(() => {
+            if (input.value !== lastValue) {
+              const wasReset = !!lastValue && !input.value;
+              log('warn', 'monitor:value-changed', {
+                field: fieldName,
+                oldValue: lastValue || '(vide)',
+                newValue: input.value || '(vide)',
+                wasReset,
+                timestamp: Date.now(),
+              });
+
+              // RESTAURATION AUTOMATIQUE si vidé par React
+              if (wasReset && expectedValue) {
+                log('warn', 'monitor:auto-restore', {
+                  field: fieldName,
+                  restoredValue: expectedValue,
+                });
+
+                // Utiliser le setter natif React
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                  HTMLInputElement.prototype,
+                  'value',
+                )?.set;
+                if (nativeInputValueSetter) {
+                  nativeInputValueSetter.call(input, expectedValue);
+                }
+                input.value = expectedValue;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+
+                lastValue = expectedValue;
+              } else {
+                lastValue = input.value;
+              }
+            }
+          });
+
+          observer.observe(input, {
+            attributes: true,
+            attributeFilter: ['value'],
+            characterData: true,
+            subtree: true,
+          });
+
+          // Observer aussi les événements input/change
+          input.addEventListener('input', () => {
+            if (input.value !== lastValue) {
+              log('warn', 'monitor:input-event', {
+                field: fieldName,
+                oldValue: lastValue || '(vide)',
+                newValue: input.value || '(vide)',
+                wasReset: !!lastValue && !input.value,
+              });
+              lastValue = input.value;
+            }
+          });
+
+          input.addEventListener('change', () => {
+            if (input.value !== lastValue) {
+              log('warn', 'monitor:change-event', {
+                field: fieldName,
+                oldValue: lastValue || '(vide)',
+                newValue: input.value || '(vide)',
+                wasReset: !!lastValue && !input.value,
+              });
+              lastValue = input.value;
+            }
+          });
+        };
+
+        // Démarrer l'observation pour chaque champ
+        for (const field of monitoredFields) {
+          const input = document.querySelector(field.selector) as HTMLInputElement | null;
+          if (input) {
+            observeInput(input, field.name);
+          }
+        }
+
+        log('info', 'monitor:active', { fields: monitoredFields.length });
 
         // Ajouter un bouton pour uploader les images manuellement
         if (draft.images && draft.images.length > 0) {

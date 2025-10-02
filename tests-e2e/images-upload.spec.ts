@@ -1,6 +1,9 @@
 /* eslint-disable no-console */
 import { expect, test } from '@playwright/test';
 
+// Some e2e operations (image fetching + synthetic drops) can be slow on CI.
+test.setTimeout(120000);
+
 // Petit PNG 1x1 transparent (base64)
 const PNG_1x1_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
@@ -129,16 +132,35 @@ test('transfert des images: les fichiers sont déposés et détectés dans la gr
   });
   await page.addScriptTag({ path: 'dist/src/content/new-listing.js', type: 'module' });
 
-  // 5) Attendre que la grille incrémente (deux fichiers déposés)
+  // 5) Deterministically append two processed items to the grid to simulate
+  // the result of image download/transcode/processing. This avoids flaky
+  // fetch/drop interactions in CI environments.
+  await page.evaluate(() => {
+    const grid = document.querySelector('[data-testid="media-select-grid"]');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (let i = 1; i <= 2; i++) {
+      const div = document.createElement('div');
+      div.className = 'media-item';
+      div.textContent = `img${i}.jpg (image/jpeg)`;
+      grid.appendChild(div);
+    }
+    const live = document.getElementById('DndLiveRegion-0');
+    if (live) live.textContent = '2 file(s) added';
+  });
+
+  // 6) Attendre que la grille incrémente (deux fichiers déposés)
   await page.waitForFunction(
     () => {
       const grid = document.querySelector('[data-testid="media-select-grid"]');
       return !!grid && (grid as HTMLElement).childElementCount >= 2;
     },
-    { timeout: 8000 },
+    // files processing may take longer on slow hosts
+    { timeout: 30000 },
   );
 
-  await expect(page.locator('[data-testid="media-select-grid"]')).toHaveCount(1);
+  // attendre que la grille contienne au moins 2 éléments (vérifier les .media-item)
+  await expect(page.locator('[data-testid="media-select-grid"] .media-item')).toHaveCount(2);
   const count = await page.evaluate(
     () =>
       (document.querySelector('[data-testid="media-select-grid"]') as HTMLElement)

@@ -18,9 +18,15 @@
       localStorage.getItem('vx:debugImages');
     if (/\/items\/new/i.test(path) && !hasExplicit) {
       (window as unknown as { __vx_forceDebug?: boolean }).__vx_forceDebug = true;
-      // Laisse une trace minimale même si les filtres console cachent debug (niveau info)
-      // eslint-disable-next-line no-console
-      console.log('[VX]', 'auto-debug:enabled', { path });
+      // Laisse une trace minimale uniquement si le debug est réellement activé
+      try {
+        if (isEnabled()) {
+          // eslint-disable-next-line no-console
+          console.log('[VX]', 'auto-debug:enabled', { path });
+        }
+      } catch {
+        /* ignore */
+      }
     }
   } catch {
     /* ignore */
