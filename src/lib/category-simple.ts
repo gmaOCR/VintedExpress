@@ -8,26 +8,56 @@ import { log } from './metrics';
  * Ouvre le dropdown en cliquant sur l'input
  */
 export async function openCategoryDropdown(): Promise<HTMLInputElement | null> {
-  const input = await waitForElement<HTMLInputElement>(
+  const selectors = [
     '[data-testid="catalog-select-dropdown-input"]',
-    { timeoutMs: 4000 },
-  );
-  if (!input) {
-    log('warn', 'category:input:not-found');
-    return null;
+    '[data-testid="catalog-select-input"]',
+    '#category',
+    'input[id="category"]',
+    'input[name="category"]',
+    'input[id*="category"]',
+    'input[name*="catalog"]',
+    '[aria-label*="category"]',
+  ];
+
+  let input: HTMLInputElement | null = null;
+  let usedSelector: string | null = null;
+
+  // Try selectors in order with a small per-selector timeout to be resilient
+  for (const sel of selectors) {
+    input = await waitForElement<HTMLInputElement>(sel, { timeoutMs: 800 });
+    if (input) {
+      usedSelector = sel;
+      break;
+    }
   }
+
+  if (!input) {
+    // Fallback: try a broad search for any input that looks like category
+    input = (document.querySelector('input') as HTMLInputElement | null) || null;
+    if (!input) {
+      log('warn', 'category:input:not-found');
+      return null;
+    }
+    usedSelector = 'fallback:any-input';
+  }
+
+  // Log which selector we used for diagnostics
+  log('debug', 'category:input:found', { selector: usedSelector, id: input.id, name: input.name });
 
   // Utiliser la fonction click() qui dispatch des événements
   click(input);
   await delay(200);
 
   // Attendre que le dropdown apparaisse
-  const dropdown = await waitForElement('[data-testid="catalog-select-dropdown-content"]', {
-    timeoutMs: 3000,
-  });
+  const dropdown = await waitForElement(
+    '[data-testid="catalog-select-dropdown-content"], [role="listbox"], [role="menu"]',
+    {
+      timeoutMs: 4000,
+    },
+  );
 
   if (!dropdown) {
-    log('warn', 'category:dropdown:failed');
+    log('warn', 'category:dropdown:failed', { selector: usedSelector });
     return null;
   }
 

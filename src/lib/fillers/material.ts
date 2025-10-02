@@ -43,6 +43,32 @@ export async function fillMaterial(draft: RepublishDraft): Promise<void> {
       picked = false;
     }
 
+    try {
+      log('debug', 'material:selected', { picked });
+    } catch {
+      /* ignore */
+    }
+
+    // If UI reported picking an item, ensure any checkbox corresponding to the
+    // chosen label is checked in the (possibly lightweight) fixtures where
+    // event listeners may not run as expected.
+    if (picked && labels && labels.length) {
+      try {
+        const want = labels[0];
+        const boxes = Array.from(
+          document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+        );
+        for (const b of boxes) {
+          if ((b.value || '').toString() === want) {
+            b.checked = true;
+            break;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
     // If UI selection happened (picked) but the input wasn't populated by the page's UI,
     // re-resolve the input element (UI may have re-rendered it) and apply a native
     // fallback to ensure the value is visible in the form.

@@ -48,70 +48,6 @@ function mountNewListingV3Dom() {
             <ul>
               <li>
                 <button type="button" data-testid="brand-multi-list-dropdown-row-button">
-
-            const categoryInput = document.querySelector<HTMLInputElement>('[data-testid="catalog-select-input"]');
-            const categoryButtons = document.querySelectorAll<HTMLButtonElement>(
-              '[data-testid="catalog-select-option"]',
-            );
-            categoryButtons.forEach((button, index) => {
-              button.addEventListener('click', () => {
-                if (!categoryInput) return;
-                const value = index === 0 ? 'Bijoux' : 'Bijoux > Bagues';
-                categoryInput.value = value;
-                categoryInput.dispatchEvent(new Event('input', { bubbles: true }));
-                categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
-              });
-            });
-
-            const brandInput = document.querySelector<HTMLInputElement>(
-              '[data-testid="brand-multi-list-dropdown-input"]',
-            );
-            const brandButton = document.querySelector<HTMLButtonElement>(
-              '[data-testid="brand-multi-list-dropdown-row-button"]',
-            );
-            brandButton?.addEventListener('click', () => {
-              if (!brandInput) return;
-              brandInput.value = 'Alienware';
-              brandInput.dispatchEvent(new Event('input', { bubbles: true }));
-              brandInput.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-
-            const sizeInput = document.querySelector<HTMLInputElement>('[data-testid="size-combobox-input"]');
-            const sizeButton = document.querySelector<HTMLButtonElement>(
-              '[data-testid="size-combobox-row-button"]',
-            );
-            sizeButton?.addEventListener('click', () => {
-              if (!sizeInput) return;
-              sizeInput.value = 'Taille unique';
-              sizeInput.dispatchEvent(new Event('input', { bubbles: true }));
-              sizeInput.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-
-            const conditionInput = document.querySelector<HTMLInputElement>(
-              '[data-testid="condition-v2-dropdown-input"]',
-            );
-            const conditionButton = document.querySelector<HTMLButtonElement>(
-              '[data-testid="condition-v2-option"]',
-            );
-            conditionButton?.addEventListener('click', () => {
-              if (!conditionInput) return;
-              conditionInput.value = 'Très bon état';
-              conditionInput.dispatchEvent(new Event('input', { bubbles: true }));
-              conditionInput.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-
-            const colorInput = document.querySelector<HTMLInputElement>('[data-testid="color-picker-input"]');
-            const colorButton = document.querySelector<HTMLButtonElement>('[data-testid="color-picker-option"]');
-            colorButton?.addEventListener('click', () => {
-              if (!colorInput) return;
-              colorInput.value = 'Argent';
-              colorInput.dispatchEvent(new Event('input', { bubbles: true }));
-              colorInput.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-
-            const materialInput = document.querySelector<HTMLInputElement>(
-              '[data-testid="material-multi-list-dropdown-input"]',
-            );
                   <span data-testid="brand-multi-list-dropdown-row-label">Alienware</span>
                 </button>
               </li>
@@ -119,11 +55,6 @@ function mountNewListingV3Dom() {
           </div>
         </div>
 
-                if (materialInput) {
-                  materialInput.value = 'Métal';
-                  materialInput.dispatchEvent(new Event('input', { bubbles: true }));
-                  materialInput.dispatchEvent(new Event('change', { bubbles: true }));
-                }
         <div data-testid="size-combobox">
           <input
             data-testid="size-combobox-input"
@@ -181,14 +112,90 @@ function mountNewListingV3Dom() {
       </form>
     </main>
   `;
+
+  // Attach small handlers to simulate user clicks for fixtures
+  const categoryInput = document.querySelector<HTMLInputElement>(
+    '[data-testid="catalog-select-input"]',
+  );
+  document
+    .querySelectorAll<HTMLButtonElement>('[data-testid="catalog-select-option"]')
+    .forEach((button, index) => {
+      button.addEventListener('click', () => {
+        if (!categoryInput) return;
+        const value = index === 0 ? 'Bijoux' : 'Bijoux > Bagues';
+        categoryInput.value = value;
+        categoryInput.dispatchEvent(new Event('input', { bubbles: true }));
+        categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+
+  const brandButton = document.querySelector<HTMLButtonElement>(
+    '[data-testid="brand-multi-list-dropdown-row-button"]',
+  );
+  const brandInput = document.querySelector<HTMLInputElement>(
+    '[data-testid="brand-multi-list-dropdown-input"]',
+  );
+  brandButton?.addEventListener('click', () => {
+    if (!brandInput) return;
+    brandInput.value = 'Alienware';
+    brandInput.dispatchEvent(new Event('input', { bubbles: true }));
+    brandInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const sizeButton = document.querySelector<HTMLButtonElement>(
+    '[data-testid="size-combobox-row-button"]',
+  );
+  const sizeInput = document.querySelector<HTMLInputElement>('[data-testid="size-combobox-input"]');
+  sizeButton?.addEventListener('click', () => {
+    if (!sizeInput) return;
+    sizeInput.value = 'Taille unique';
+    sizeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    sizeInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const conditionButton = document.querySelector<HTMLButtonElement>(
+    '[data-testid="condition-v2-option"]',
+  );
+  const conditionInput = document.querySelector<HTMLInputElement>(
+    '[data-testid="condition-v2-dropdown-input"]',
+  );
+  conditionButton?.addEventListener('click', () => {
+    if (!conditionInput) return;
+    // Fixture simulates localized label, the filler will normalize to canonical English
+    conditionInput.value = 'Très bon état';
+    conditionInput.dispatchEvent(new Event('input', { bubbles: true }));
+    conditionInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const colorButton = document.querySelector<HTMLButtonElement>(
+    '[data-testid="color-picker-option"]',
+  );
+  const colorInput = document.querySelector<HTMLInputElement>('[data-testid="color-picker-input"]');
+  colorButton?.addEventListener('click', () => {
+    if (!colorInput) return;
+    colorInput.value = 'Argent';
+    colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+    colorInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  const materialButton = document.querySelector<HTMLButtonElement>(
+    '[data-testid="material-multi-list-dropdown-row-button"]',
+  );
+  const materialInput = document.querySelector<HTMLInputElement>(
+    '[data-testid="material-multi-list-dropdown-input"]',
+  );
+  materialButton?.addEventListener('click', () => {
+    if (!materialInput) return;
+    materialInput.value = 'Métal';
+    materialInput.dispatchEvent(new Event('input', { bubbles: true }));
+    materialInput.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 }
 
 function mountPortalCategoryDom() {
   mountNewListingV3Dom();
   const panel = document.querySelector('[data-testid="catalog-select-panel"]');
-  if (panel) {
-    panel.innerHTML = '';
-  }
+  if (panel) panel.innerHTML = '';
 
   const portal = document.createElement('div');
   portal.setAttribute('data-testid', 'catalog-select-dropdown-content');
@@ -197,7 +204,6 @@ function mountPortalCategoryDom() {
   const categoryInput = document.querySelector<HTMLInputElement>(
     '[data-testid="catalog-select-input"]',
   );
-
   const columns: HTMLElement[] = [];
   const setCategoryValue = (value: string) => {
     if (!categoryInput) return;
@@ -206,10 +212,7 @@ function mountPortalCategoryDom() {
     categoryInput.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
-  type ColumnEntry = {
-    label: string;
-    onSelect?: () => void;
-  };
+  type ColumnEntry = { label: string; onSelect?: () => void };
 
   const renderColumn = (level: number, entries: ColumnEntry[]) => {
     while (columns.length > level) {
@@ -227,9 +230,7 @@ function mountPortalCategoryDom() {
       labelSpan.setAttribute('data-testid', 'catalog-select-dropdown-row-label');
       labelSpan.textContent = entry.label;
       button.appendChild(labelSpan);
-      button.addEventListener('click', () => {
-        entry.onSelect?.();
-      });
+      button.addEventListener('click', () => entry.onSelect?.());
       column.appendChild(button);
     }
     portal.appendChild(column);
@@ -240,46 +241,27 @@ function mountPortalCategoryDom() {
     renderColumn(3, [
       {
         label: 'Bagues',
-        onSelect: () => {
-          setCategoryValue('Hommes > Accessoires > Bijoux > Bagues');
-        },
+        onSelect: () => setCategoryValue('Hommes > Accessoires > Bijoux > Bagues'),
       },
       { label: 'Bracelets' },
     ]);
   };
-
   const renderLevel2 = () => {
     renderColumn(2, [
-      {
-        label: 'Bijoux',
-        onSelect: () => {
-          setTimeout(renderLevel3, 30);
-        },
-      },
+      { label: 'Bijoux', onSelect: () => setTimeout(renderLevel3, 30) },
       { label: 'Montres' },
     ]);
   };
-
   const renderLevel1 = () => {
     renderColumn(1, [
-      {
-        label: 'Accessoires',
-        onSelect: () => {
-          setTimeout(renderLevel2, 30);
-        },
-      },
+      { label: 'Accessoires', onSelect: () => setTimeout(renderLevel2, 30) },
       { label: 'Vêtements' },
     ]);
   };
 
   renderColumn(0, [
     { label: 'Femmes' },
-    {
-      label: 'Hommes',
-      onSelect: () => {
-        setTimeout(renderLevel1, 30);
-      },
-    },
+    { label: 'Hommes', onSelect: () => setTimeout(renderLevel1, 30) },
     { label: 'Enfants' },
   ]);
 }
@@ -296,9 +278,7 @@ describe('fillNewItemForm regression with new multi-list inputs', () => {
     vi.spyOn(domUtils, 'waitForElement').mockImplementation(async (selector, options) => {
       waitCalls.push(selector);
       const immediate = document.querySelector(selector) as Element | null;
-      if (immediate) {
-        return immediate as unknown as Awaited<ReturnType<typeof originalWait>>;
-      }
+      if (immediate) return immediate as unknown as Awaited<ReturnType<typeof originalWait>>;
       const next = { ...(options ?? {}), timeoutMs: Math.min(options?.timeoutMs ?? 3000, 200) };
       return originalWait(selector, next as Parameters<typeof originalWait>[1]);
     });
@@ -316,7 +296,7 @@ describe('fillNewItemForm regression with new multi-list inputs', () => {
       categoryPath: ['Bijoux', 'Bagues'],
       brand: 'Alienware',
       size: 'Taille unique',
-      condition: 'Très bon état',
+      condition: 'Very good',
       color: ['Argent'],
       material: 'Métal',
       images: ['blob:1'],
@@ -349,6 +329,7 @@ describe('fillNewItemForm regression with new multi-list inputs', () => {
 
     expect(brandInput?.value).toBe('Alienware');
     expect(sizeInput?.value).toBe('Taille unique');
+    // Condition labels are normalized to canonical English for consistency
     expect(conditionInput?.value).toBe('Very good');
     expect(materialInput?.value).toBe('Métal');
 
@@ -363,7 +344,7 @@ describe('fillNewItemForm regression with new multi-list inputs', () => {
       categoryPath: ['Hommes', 'Accessoires', 'Bijoux', 'Bagues'],
       brand: 'Alienware',
       size: 'Taille unique',
-      condition: 'Très bon état',
+      condition: 'Very good',
       color: ['Argent'],
       material: 'Métal',
       images: ['blob:2'],

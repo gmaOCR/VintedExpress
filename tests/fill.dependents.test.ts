@@ -2,6 +2,7 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { log } from '../src/lib/metrics';
 import type { RepublishDraftParsed } from '../src/types/draft';
 
 async function loadFixture(opts?: { afterCategory?: boolean }) {
@@ -68,28 +69,24 @@ describe('fill dependents integration', () => {
 
     // Fillers accept the draft type.
     await fillBrand(draft);
-    // eslint-disable-next-line no-console
-    console.log('AFTER fillBrand ->', {
+    // trace via central logger (respect metrics gate)
+    log('debug', 'AFTER fillBrand ->', {
       brand: (document.querySelector('#brand-input') as HTMLInputElement | null)?.value,
     });
     await fillSize(draft);
-    // eslint-disable-next-line no-console
-    console.log('AFTER fillSize ->', {
+    log('debug', 'AFTER fillSize ->', {
       size: (document.querySelector('#size-input') as HTMLInputElement | null)?.value,
     });
     await fillCondition(draft);
-    // eslint-disable-next-line no-console
-    console.log('AFTER fillCondition ->', {
+    log('debug', 'AFTER fillCondition ->', {
       condition: (document.querySelector('#condition-input') as HTMLInputElement | null)?.value,
     });
     await fillColor(draft);
-    // eslint-disable-next-line no-console
-    console.log('AFTER fillColor ->', {
+    log('debug', 'AFTER fillColor ->', {
       color: (document.querySelector('#color-input') as HTMLInputElement | null)?.value,
     });
     await fillMaterial(draft);
-    // eslint-disable-next-line no-console
-    console.log('AFTER fillMaterial ->', {
+    log('debug', 'AFTER fillMaterial ->', {
       material: (
         document.querySelector(
           '[data-testid="material-multi-list-dropdown-input"]',
@@ -98,8 +95,8 @@ describe('fill dependents integration', () => {
     });
 
     // debug: inspect material input after filler ran
-    // eslint-disable-next-line no-console
-    console.log(
+    log(
+      'debug',
       'DEBUG: material input value after fillMaterial ->',
       (
         document.querySelector(
@@ -127,7 +124,7 @@ describe('fill dependents integration', () => {
     expect(color).toBeTruthy();
 
     expect(size!.value).toBe('Ajustable');
-    expect(condition!.value).toBe('Neuf avec étiquette');
+    expect(condition!.value).toBe('New with tags');
     expect(material!.value).toBe('Métal');
     expect(color!.value).toBe('Argenté');
   });

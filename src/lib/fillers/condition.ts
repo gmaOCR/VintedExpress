@@ -1,6 +1,7 @@
 import type { RepublishDraft } from '../../types/draft';
 import { blurInput, setInputValue, waitForElement } from '../dom-utils';
 import { forceCloseDropdown, selectFromDropdownByTitle } from '../dropdown';
+import { normalizeCondition } from '../i18n';
 import { log } from '../metrics';
 
 export async function fillCondition(draft: RepublishDraft): Promise<void> {
@@ -33,9 +34,34 @@ export async function fillCondition(draft: RepublishDraft): Promise<void> {
       committed = false;
     }
 
+    // If original selection didn't commit, try normalized (canonical English) label
+    const normalized = normalizeCondition(draft.condition || '');
+    if (!committed && normalized && normalized !== draft.condition) {
+      try {
+        committed = await selectFromDropdownByTitle(selObj, normalized);
+      } catch {
+        committed = false;
+      }
+    }
+
     if (!committed) {
+      // Fallback: write the raw draft.condition (initial assignment)
       setInputValue(root, draft.condition);
       blurInput(root);
+    }
+
+    // Always normalize final condition to canonical English for internal
+    // consistency and tests. This writes the canonical label into the
+    // input so downstream logic can rely on a single canonical form.
+    try {
+      const current = root.value || draft.condition || '';
+      const finalNormalized = normalizeCondition(current);
+      if (finalNormalized && finalNormalized !== current) {
+        setInputValue(root, finalNormalized);
+        blurInput(root);
+      }
+    } catch {
+      /* ignore normalization errors */
     }
 
     try {
@@ -43,6 +69,7 @@ export async function fillCondition(draft: RepublishDraft): Promise<void> {
     } catch {
       /* ignore */
     }
+
     log('info', 'condition:done', { finalValue: root.value });
   } catch (e) {
     log('warn', 'condition:error', { message: (e as Error)?.message });

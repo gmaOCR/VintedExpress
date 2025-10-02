@@ -78,9 +78,41 @@ export async function fillNewItemForm(draft: RepublishDraft) {
     runId,
   });
   try {
-    // Approche simplifiée et logique: titre/description/prix, catégorie, puis remplissages en parallèle
+    // Attendre et remplir la catégorie si fournie
+    const categorySelector =
+      '[data-testid="catalog-select-dropdown-input"], [data-testid="catalog-select-input"]';
 
-    // Indépendants
+    if (draft.categoryPath && draft.categoryPath.length) {
+      perf('category', 'start');
+      const path = sanitizeCategoryPath(draft.categoryPath ?? []);
+      if (path.length) {
+        // Attendre la présence du champ catégorie (page lente)
+        const catInput = await waitForElement<HTMLInputElement>(categorySelector, {
+          timeoutMs: 8000,
+        });
+        if (!catInput) {
+          log('warn', 'category:input:not-found-after-wait');
+        }
+
+        const success = await fillCategory(path);
+        if (!success) {
+          log('warn', 'category:failed', { path });
+        }
+
+        // Unisex option (après commit catégorie)
+        if (draft.unisex) {
+          const unisexInput = await waitForElement<HTMLInputElement>(
+            'input[type="checkbox"][name*="unisex" i]',
+          );
+          if (unisexInput && !unisexInput.checked) {
+            click(unisexInput);
+          }
+        }
+      }
+      perf('category', 'end');
+    }
+
+    // Remplir les champs principaux (titre/description/prix)
     const titleInput = await waitForElement<HTMLInputElement>(
       'input[name="title"], input#title, [data-testid="title--input"], [data-testid="title-input"], [data-testid="title-field-input"]',
     );
@@ -201,73 +233,23 @@ export async function fillNewItemForm(draft: RepublishDraft) {
       }
     }
 
-    // (Unisex déclenché juste après la catégorie)
-
-    // Catégorie - VERSION SIMPLIFIÉE
-    let startedDependent = false;
-    if (draft.categoryPath && draft.categoryPath.length) {
-      perf('category', 'start');
-      const path = sanitizeCategoryPath(draft.categoryPath ?? []);
-
-      if (path.length) {
-        const success = await fillCategory(path);
-
-        if (!success) {
-          log('warn', 'category:failed', { path });
-        }
-
-        // Unisex
-        if (draft.unisex) {
-          const unisexInput = await waitForElement<HTMLInputElement>(
-            'input[type="checkbox"][name*="unisex" i]',
-          );
-          if (unisexInput && !unisexInput.checked) {
-            click(unisexInput);
-          }
-        }
-
-        // Remplir les champs dépendants
-        const seq = async (label: keyof RepublishDraft, fn: () => Promise<void>) => {
-          log('debug', `dep:${label}:start`);
-          try {
-            await fn();
-          } catch (e) {
-            log('warn', `dep:${label}:error`, { message: (e as Error)?.message });
-          }
-          log('debug', `dep:${label}:end`);
-        };
-
-        await seq('brand', () => fillBrand(draft));
-        await seq('size', () => fillSize(draft));
-        await seq('condition', () => fillCondition(draft));
-        await seq('color', () => fillColor(draft));
-        await seq('material', () => fillMaterial(draft));
-        await seq('patterns', () => fillPatterns(draft));
-        startedDependent = true;
+    // Champs dépendants: remplir dans l'ordre
+    const seq = async (label: keyof RepublishDraft, fn: () => Promise<void>) => {
+      log('debug', `dep:${label}:start`);
+      try {
+        await fn();
+      } catch (e) {
+        log('warn', `dep:${label}:error`, { message: (e as Error)?.message });
       }
+      log('debug', `dep:${label}:end`);
+    };
 
-      perf('category', 'end');
-    }
-
-    // Si aucune catégorie n'a été traitée (ou absente), remplir tout de même les champs dépendants
-    if (!startedDependent) {
-      log('debug', 'dependents:direct');
-      const seq = async (label: keyof RepublishDraft, fn: () => Promise<void>) => {
-        log('debug', `dep:${label}:start`);
-        try {
-          await fn();
-        } catch (e) {
-          log('warn', `dep:${label}:error`, { message: (e as Error)?.message });
-        }
-        log('debug', `dep:${label}:end`);
-      };
-      await seq('brand', () => fillBrand(draft));
-      await seq('size', () => fillSize(draft));
-      await seq('condition', () => fillCondition(draft));
-      await seq('color', () => fillColor(draft));
-      await seq('material', () => fillMaterial(draft));
-      await seq('patterns', () => fillPatterns(draft));
-    }
+    await seq('brand', () => fillBrand(draft));
+    await seq('size', () => fillSize(draft));
+    await seq('condition', () => fillCondition(draft));
+    await seq('color', () => fillColor(draft));
+    await seq('material', () => fillMaterial(draft));
+    await seq('patterns', () => fillPatterns(draft));
 
     // Pas de pause inutile: laisser la page réagir naturellement
 
