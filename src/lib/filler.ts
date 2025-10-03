@@ -100,13 +100,43 @@ export async function fillNewItemForm(draft: RepublishDraft) {
         }
 
         // Unisex option (après commit catégorie)
-        if (draft.unisex) {
-          const unisexInput = await waitForElement<HTMLInputElement>(
-            'input[type="checkbox"][name*="unisex" i]',
-          );
-          if (unisexInput && !unisexInput.checked) {
-            click(unisexInput);
+        // Unisex option (après commit catégorie)
+        try {
+          const descText = (draft.description ?? '') as string;
+          const looksUnisex =
+            !!draft.unisex ||
+            (typeof descText === 'string' && /\b(unisex|unisexe|unisexes?)\b/i.test(descText));
+
+          if (looksUnisex) {
+            const unisexSelector =
+              'input[type="checkbox"]#unisex, input[type="checkbox"][name*="unisex" i], input[type="checkbox"][aria-label*="unisex" i]';
+            const unisexInput = await waitForElement<HTMLInputElement>(unisexSelector, {
+              timeoutMs: 3000,
+            });
+            if (unisexInput) {
+              if (!unisexInput.checked) {
+                try {
+                  click(unisexInput);
+                } catch {
+                  // fallback: set property and dispatch events
+                  try {
+                    unisexInput.checked = true;
+                    unisexInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    unisexInput.dispatchEvent(new Event('change', { bubbles: true }));
+                  } catch {
+                    /* ignore */
+                  }
+                }
+                log('info', 'fill:unisex:checked');
+              } else {
+                log('debug', 'fill:unisex:already-checked');
+              }
+            } else {
+              log('warn', 'fill:unisex:not-found');
+            }
           }
+        } catch (e) {
+          log('warn', 'fill:unisex:error', { message: (e as Error)?.message ?? String(e) });
         }
       }
       perf('category', 'end');

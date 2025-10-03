@@ -84,6 +84,21 @@ test('republish flow: click republish -> open new -> auto-fill only when marker 
         <textarea name="description"></textarea>
         <input name="price" />
         <div data-testid="dropzone"></div>
+        <!-- Simulated unisex checkbox -->
+        <div class="web_ui__Cell__cell web_ui__Cell__default web_ui__Cell__transparent" role="presentation">
+          <div class="web_ui__Cell__content">
+            <div class="web_ui__Cell__body">
+              <div class="item-upload__field">
+                <label for="unisex" class="web_ui__Checkbox__checkbox">
+                  <input id="unisex" aria-label="Unisexe" type="checkbox" value="1" name="unisex">
+                  <span class="web_ui__Checkbox__button web_ui__Checkbox__button-left">
+                    <span class="web_ui__Checkbox__label">Unisexe</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- Simulated category dropdown to exercise the real selection path in tests -->
         <div data-testid="catalog-select-dropdown-content" role="listbox" style="display:block">
           <div data-testid="catalog-select-dropdown-row" role="option">
@@ -137,8 +152,10 @@ test('republish flow: click republish -> open new -> auto-fill only when marker 
     if (!g.__vx_test_storage!['vx:republishDraft']) {
       g.__vx_test_storage!['vx:republishDraft'] = {
         title: 'Lovely jacket (republished)',
-        description: 'Nice jacket, lightly used',
+        description: 'Nice jacket, lightly used; unisex punk/hip-hop style',
         images: [],
+        unisex: true,
+        categoryPath: ['Clothing', 'Jackets', 'Leather Jackets'],
       };
     }
   });
@@ -179,4 +196,10 @@ test('republish flow: click republish -> open new -> auto-fill only when marker 
   );
   expect(titleValue).toContain('Lovely jacket');
   expect(descValue).toContain('Nice jacket');
+  // Check that the unisex checkbox was set by the content script
+  const unisexChecked = await page.$eval(
+    'input[type="checkbox"][name*="unisex" i]',
+    (el) => (el as HTMLInputElement).checked,
+  );
+  expect(unisexChecked).toBe(true);
 });
