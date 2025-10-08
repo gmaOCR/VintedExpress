@@ -12,3 +12,12 @@ release/
 
 # test coverage output
 coverage/
+tools/ANTI_DETECTION_GUIDE.md
+tools/ANTI_DETECTION_V2_GUIDE.md
+tools/.chrome_profile*
+tools/.local-chromedriver
+__pycache__
+tools/last-capture-items-new.html
+tools/last-capture-items-new.png
+tools/session.json
+.gitignore
